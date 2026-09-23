@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "Mixboard_Clone",
+  "project_id": "b52f6524-88fd-4385-87a4-fb3eb8240e78"
+}
