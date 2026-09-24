@@ -17,3 +17,9 @@
 # Beads / Dolt files (added by bd init)
 *.gate.lock*
 *.pdf
+node_modules/
+dist/
+data/
+playwright-report/
+test-results/
+.superpowers/

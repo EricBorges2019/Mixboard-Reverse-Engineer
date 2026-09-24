@@ -1,0 +1,17 @@
+{
+  "name": "mixboard-clone",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter @mixboard/server --filter @mixboard/web dev",
+    "lint": "eslint .",
+    "test": "vitest run && pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}
