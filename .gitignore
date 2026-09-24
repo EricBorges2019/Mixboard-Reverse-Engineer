@@ -4,3 +4,12 @@
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Captured traffic (contains auth cookies)
+*.har
+.beads/issues.jsonl
+/captures
+
+# Local secrets and OS files
+.env
+.DS_Store
