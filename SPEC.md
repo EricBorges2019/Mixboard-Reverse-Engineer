@@ -154,10 +154,11 @@ Positional arrays. "?" = not confirmed.
 | 2 | boards[] |
 | 3 | createdAt `[sec, nanos]` |
 | 4 | updatedAt |
-| 5 | `1` ? |
-| 6 | `true` ? |
-| 7 | thumbnail URL (response) |
-| 8 | thumbnail base64 JPEG (request, `dmKd`) |
+| 5 | `1` in requests and responses, meaning unknown |
+| 6 | `1` in requests, `true` in responses; probably "has thumbnail" |
+| 7 | thumbnail URL (response): `…/projects/<id>/thumbnail/<updatedAt in ms>`. The number is the project's updatedAt (`[1790213719,451116000]` → `1790213719451`), so it acts as a cache-buster; the client GETs it after each `dmKd` |
+| 8 | thumbnail base64 JPEG (request, `dmKd`); `null` in responses |
+| 9 | presentations `[[presentationId, projectId, status, null, "", 1]]`; status `1` right after `vZrjA`, `4` once generated (response only) |
 
 ### Board
 
@@ -230,7 +231,7 @@ The agent's `update_text_block` stores plain text in the resource (mime `text/pl
 
 `[projectId, boardId, artifactId, 3, styleName, base64(Markdown styleContent), "text/markdown", null, base64 PNG preview]`
 
-The preview PNG (~1.9 MB) carries C2PA data, so it's AI-generated. Type `3` = style.
+The preview PNG is about 81–83 KB as base64 in the listing (the earlier ~1.9 MB figure was not reproduced). It carries C2PA data, so it's AI-generated. Type `3` = style; the markdown is 1.2–1.5 KB. The artifact shows up in the list about 8 s after `save_style` returns, so the preview is made server-side, not by an agent image tool call.
 
 ## 6. Image captions
 
@@ -367,7 +368,7 @@ Skill files recovered so far (verbatim, in `prompts/skills/`): `image-generation
 | | `delete_block` | `block_id` | |
 | clarification-skill | `ask_clarification` | `questions: [{question, suggestions: [4 strings]}]` | ✔ |
 | spatial-awareness-skill | `get_spatial_context` | — | |
-| style-skill | `save_style` | `style_content, style_name="style"` → `Style "<name>" saved successfully.` Also auto-generates a logo image for the style bank. | ✔ |
+| style-skill | `save_style` | `style_content, style_name="style"` → `Style "<name>" saved successfully.` The style bank preview image is made server-side after the call (no `create_image_block` appears in the stream). | ✔ |
 | | `get_style` | `artifact_id` | |
 | | `delete_style` | `artifact_id` | (skill file + JS label) |
 | ? | `create_document_block`, `create_table_block` | ? | (JS status labels only) |
@@ -417,6 +418,12 @@ The first stream chunk of every agent call is a one-line pun about the request, 
 - "I’m *promptly* working on that for you!"
 - "I’m picturing it now—stay tuned for the reveal!"
 - "I’m crafting a style—hope it’s your cup of tea!"
+- "Formally on it—no pun intended!"
+- "Consider it deleted—I’m erasing it as we speak!"
+- "I’m on board with this! Checking it now."
+- "I’m styling it out—working on your request now!"
+- "Reloading your cartridge—let’s play it again!"
+- "I’m on it—consider this PDF officially \"re-paged!\""
 
 Reconstructed rule: one sentence, under ~70 characters, first person or gerund, at least one pun on the request topic, often ends with "stay tuned", may use `*emphasis*` on the pun word.
 
@@ -432,6 +439,15 @@ Style agent: `save_style` "💾 Bottling up your aesthetic...", `get_style` "�
 - Product mockup: ``Generate a ${type} mockup of the following block`` (`printableAgent: {productType: "catalog_mockup"}`, `skipClarification: true`)
 - Auto products: `"Analyze these images and design products that match their style. Use auto mode to pick the best 10 products. Use the product types that match the blocks."`
 - Product variant: ``Regenerate the ${type} design with the following creative direction: ${direction}`` or ``Generate a new design variant for this ${type} in all available color variants``, plus `` (printable_id: ${id})`` when set.
+
+### 7.9 Newly captured tool behavior (2026-09-24 recapture)
+
+- `update_text_block(update_block_id, generated_text_content)` (text-generation-skill): no tool-result chunk; the updated block arrives as a slot-10 record `[null,null,null,Block,2]` (last value probably "updated", 1 "created"). The reply names the block with a chip: `[[id:<id>|name:<name>]]`.
+- `delete_block(block_id)` (core-board-skill): result `{"result":"Block <id> deleted."}`. The agent used the id from the previous turn, not the (wrong) selected id the client sent.
+- `save_style` result key is `result`: `Style "<name>" saved successfully.` Style content has exactly the six bold-labelled sections (Color Palette, Lighting, Texture, Composition Style, Rendering Technique, Mood).
+- `load_skill` results echo only `{"skill_name": …}`; the skill body is never sent to the client, so SKILL.md text stays unrecoverable from traffic. A style run loads `style-skill` and `image-generation-intent-skill` in parallel. The model once guessed a skill (`board-editing-skill`) and got `SKILL_NOT_FOUND`, then called `list_skills`.
+- A plain "describe the board" turn makes no tool calls: board context is injected server-side. Not captured: `get_spatial_context`, `get_style`, `delete_style`, `update_image_block`.
+- Image edit is not an agent tool (see §4.5).
 
 ## 8. Other features seen in JS (scope TBD)
 
