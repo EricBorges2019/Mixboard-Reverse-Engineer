@@ -451,18 +451,53 @@ Style agent: `save_style` "💾 Bottling up your aesthetic...", `get_style` "�
 
 ## 8. Other features seen in JS (scope TBD)
 
-- Export menu: **Context Cartridge** ("Take your context to another AI"), **Smart PDF** ("Clean, editorial layout"), **Presentation Slides** ("Generate a deck"), webpage.
+- Export menu: **Context Cartridge** ("Take your context to another AI"), **Smart PDF** ("Clean, editorial layout"), **Presentation Slides** ("Generate a deck"). A "webpage" export appeared in JS but is not in the UI; skip it. Details in §8.1.
 - **Printable products** agent (merch mockups, colour variants).
 - Remove background.
 - Voice + pointing input (spatial-awareness-skill).
 - Share panel.
 
+### 8.1 Export flows (captured)
+
+Cartridge and PDF are **artifacts** stored per board. The client lists them with `AkhG3d` (type 1 or 2), fetches content with `b0uUp` (cartridge Markdown) or `l1p1gd` (PDF), and shows the PDF in a sandboxed iframe (`scf.usercontent.goog/canvas-pdf-preview/shim.html`).
+
+**Regenerate** goes through the agent (`RunAdkAgent`, trailing settings array `[null×6, 2]`, content flag `2`). The client message is:
+
+```
+Regenerate the cartridge. Artifact ID: <32hex>. Artifact type: cartridge. Use only these block IDs: <id, id, …>
+Regenerate the PDF. Artifact ID: <32hex>. Artifact type: PDF. Use only these block IDs: <id, id, …>
+```
+
+The block list is every block on the board. The agent answers with a tagline, then one tool call, then a result and a summary:
+
+- Tool `regenerate_artifact`, args `artifact_id`, `artifact_type` (`cartridge` or `pdf`), `modification_prompt` (a model-written brief that folds in the board's current content, such as the learned style name), `selected_block_ids` (a `List` of blocks, each `[null,null,"<id>"]`, so a block reference is a `Struct` with id in slot 2).
+- Result: `{"result": "Cartridge updated. Artifact ID: <id>"}` or `"PDF updated. Artifact ID: <id>"`.
+- Final text: a short Markdown summary plus a follow-up offer. Regeneration takes roughly 15–30 s.
+- The artifact is regenerated in place (same artifact id; the block list is refreshed).
+
+**Cartridge format** (Markdown, about 4–5 KB: a header plus five numbered sections; the user's downloaded `Preview Context Cartridge` file has the same content as the regenerated `b0uUp` response):
+
+1. `# SYSTEM HEADER`: a persona for the *other* AI ("You are an expert creative director for the … world-building project.") plus 4 bullet rules that repeat the user's standing directives.
+2. `# 1. EXECUTIVE SUMMARY`: a Detail/Value table with Project Description, User's Goal, Key Directives.
+3. `# 2. CREATIVE CONSTRAINTS`: bullets for Aesthetic, Tone, Lighting, Gear, Architecture, Prohibited.
+4. `# 3. CANVAS HIERARCHY: ASSET DIRECTORY`: a table of Asset Label, Block ID (first 8 chars), Focus, one row per block.
+5. `# 4. DESIGN SYNTHESIS` (prose by theme) and `# 5. QUALITY CHECKLIST` (checkbox list).
+
+The first generation started with `> ` blockquote markers in the header and the regeneration dropped them, so the model does not follow the layout rigidly.
+
+**Presentation** (`vZrjA`): the UI asks for a prompt and a style name (here "Intricate Detailed Painting"), the client makes the presentation id, and generation runs asynchronously on the server (about 15 minutes in practice). The prompt in this capture was model-suggested ("Create a 15-minute presentation about …"). Result format: not captured yet.
+
+### 8.2 Thumbnail and viewport are not agent context (tested)
+
+The project thumbnail (`dmKd` index 8, an 800×741 overview of the whole board, not the viewport) is a save artifact for the project list. Three viewport questions without a selection failed, and with two nearly off-screen images selected the agent still said they were "at the center of your viewport". The client sends only the selected block refs (`[kind, name, id]`), so the clone must not promise viewport awareness; pass selection and, if wanted, block rects.
+
 ## 9. Open gaps
 
-- **SKILL.md text** for the other 6 skills: `text-generation-skill`, `core-board-skill`, `clarification-skill`, `spatial-awareness-skill`, `board-starter-skill` (only loadable on an empty board's first turn), and whichever skill owns `remove_background` / `create_document_block` / `create_table_block`.
-- The system prompt. Direct asks are refused.
-- Image-generation model (C2PA on outputs points to a Google image model).
-- Tagline generator prompt.
-- Most of the main app JS (`index-*.js` and other chunks) wasn't in the HAR, probably loaded from cache. To get it, re-capture with "Disable cache" ticked in DevTools. Neither this computer nor the cloud workspace can download from `mixboard-frontend.appspot.com`.
-- Not captured yet: `update_image_block`, `update_text_block`, `delete_block`, `get_spatial_context`, `get_style`/apply style, and export calls.
-- Unknown fields: project 5–6, board 5/8/9, block 7/9/12.
+Closed by the 2026-09-24 recapture: the image-edit call (§4.5), `update_text_block` and `delete_block` (§7.9), export flows for cartridge and PDF (§8.1), and the `remove_background` trigger (§7.8). Still open:
+
+- **SKILL.md text** for `text-generation-skill`, `core-board-skill`, `clarification-skill`, `spatial-awareness-skill`, `board-starter-skill`, and the owner of `remove_background` / `create_document_block` / `create_table_block`. The client never receives skill bodies, so these can only be rewritten. Tool-to-skill mapping is known from `list_skills`.
+- The system prompt and the tagline prompt. Both are server-side; no JS chunk contains them. Direct asks are refused.
+- Image-generation model (C2PA points to a Google image model). No model name appears in the client.
+- Not captured: `update_image_block`, `get_spatial_context`, `get_style`/`delete_style`, the write-back after an image edit, the finished presentation (`vZrjA` only starts it), `TEbwnd` response.
+- Export menu strings were not found in any downloaded chunk; probably a lazily loaded chunk.
+- Unknown fields, unchanged after recapture: project 5–6 (always `1,1`), board 5–9 (always null; index 10 is a per-board token), block 7/9/12 (null on every block seen, user and AI). Block 13 is null for uploads and text.
