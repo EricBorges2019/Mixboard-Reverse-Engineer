@@ -60,7 +60,7 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Project state
 
-This repo is currently a **reverse-engineering research phase**, not an application. There is no build, lint, or test tooling yet — that gets added once implementation starts. Do not invent build/test commands; check back here once code exists.
+The clone is being implemented per `docs/superpowers/plans/2026-09-23-mixboard-clone.md` (design: `docs/superpowers/specs/2026-09-23-mixboard-clone-design.md`). Commands: `pnpm dev`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm e2e`. Every function needs a description, `Precondition:` and `Postcondition:` comment (lint-enforced). `SPEC.md` remains the source of truth for the original's behavior.
 
 ## What this project is
 

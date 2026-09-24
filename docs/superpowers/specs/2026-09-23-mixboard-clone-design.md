@@ -163,9 +163,7 @@ built-in text shape props; OpenRouter tool-call round trip and image output form
 
 Open, to settle in the plan or a spike:
 
-1. Whether each candidate image model (`google/gemini-3.1-flash-image`, `openai/gpt-image-2.5-flare`)
-   honors `image_config.aspect_ratio` for all five ratios. The plan's Task 6 probe answers this.
-   Unsupported ratios are generated at the nearest supported one and the block keeps its shape.
+1. Image model aspect ratios: **not yet probed live** (needs the user's key). `check-models` confirmed all four default ids exist on OpenRouter (2026-09-24). Run `pnpm --filter @mixboard/server check-models --live` for each candidate and set `IMAGE_SUPPORTED_RATIOS` if a ratio is unsupported; unsupported ratios fall back to the nearest supported one and the block keeps its shape.
 2. ~~Whether tldraw's `richText` is stored as a document object or a JSON string.~~ Settled (Task 13 spike): a TipTap doc object.
 3. ~~tldraw version pin~~ Settled: `~4.3.0` (installed 4.3.3). Custom shapes must be registered on `TLGlobalShapePropsMap` (module augmentation) for `BaseBoxShapeUtil` to typecheck.
 4. The persona prompt, the tagline prompt and four skills (`text-generation-skill`,
