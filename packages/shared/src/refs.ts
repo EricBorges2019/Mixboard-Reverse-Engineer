@@ -2,7 +2,7 @@ export type RefSegment = { type: 'text'; text: string } | { type: 'ref'; id: str
 
 /**
  * Formats a block reference that chat renders as a chip.
- * Precondition: `id` and `name` contain no `]` characters.
+ * Precondition: `id` contains no `]` or `|`; `name` contains no `[[` or `]]`.
  * Postcondition: returns `[[id:<id>|name:<name>]]`.
  */
 export function blockRef(id: string, name: string): string {
@@ -11,12 +11,12 @@ export function blockRef(id: string, name: string): string {
 
 /**
  * Splits chat text into plain and reference segments.
- * Precondition: none. Names may contain single `]` but not `]]`.
+ * Precondition: none. Names may contain `]` (even a trailing one) but not `[[`, so a malformed ref never swallows the next one.
  * Postcondition: concatenating the segments' text (refs re-formatted) reproduces `text`; empty text segments are omitted.
  */
 export function splitBlockRefs(text: string): RefSegment[] {
   const out: RefSegment[] = [];
-  const re = /\[\[id:([^|\]]+)\|name:((?:(?!\]\]).)*)\]\]/g;
+  const re = /\[\[id:([^|\]]+)\|name:((?:(?!\[\[).)*?)\]\](?!\])/g;
   let last = 0;
   for (const m of text.matchAll(re)) {
     if (m.index > last) out.push({ type: 'text', text: text.slice(last, m.index) });

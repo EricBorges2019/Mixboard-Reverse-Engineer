@@ -17,21 +17,26 @@ function parseBlock(raw: string): { event: string; data: string } | null {
 /**
  * Reads a Server-Sent Events body incrementally.
  * Precondition: `body` is a readable byte stream of SSE text.
- * Postcondition: yields each complete event in order as chunks arrive; an unterminated trailing event is dropped. Handles events split across chunks and CRLF line endings.
+ * Postcondition: yields each complete event in order as chunks arrive; an unterminated trailing event is dropped. Handles events split across chunks and CRLF line endings. When the consumer stops early (break or throw) the body is cancelled.
  */
 export async function* parseSse(body: ReadableStream<Uint8Array>): AsyncGenerator<{ event: string; data: string }> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) return;
-    buffer = (buffer + decoder.decode(value, { stream: true })).replace(/\r\n/g, '\n');
-    let end: number;
-    while ((end = buffer.indexOf('\n\n')) !== -1) {
-      const parsed = parseBlock(buffer.slice(0, end));
-      buffer = buffer.slice(end + 2);
-      if (parsed) yield parsed;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      buffer = (buffer + decoder.decode(value, { stream: true })).replace(/\r\n/g, '\n');
+      let end: number;
+      while ((end = buffer.indexOf('\n\n')) !== -1) {
+        const parsed = parseBlock(buffer.slice(0, end));
+        buffer = buffer.slice(end + 2);
+        if (parsed) yield parsed;
+      }
     }
+  } finally {
+    // Closing the body tells the server the client is gone, so its agent run is aborted.
+    await reader.cancel().catch(() => undefined);
   }
 }

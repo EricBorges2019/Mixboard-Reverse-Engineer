@@ -10,3 +10,10 @@ describe('refsToLinks', () => {
     expect(refsToLinks('no refs [here](https://e.com)')).toBe('no refs [here](https://e.com)');
   });
 });
+
+describe('refsToLinks edge cases', () => {
+  it('handles a name ending in a bracket and does not swallow a following ref', () => {
+    expect(refsToLinks('[[id:1|name:A [x]]]')).toBe('[A x](block:1)');
+    expect(refsToLinks('[[id:a|name:foo] typo, see [[id:b|name:Bar]]')).toContain('[Bar](block:b)');
+  });
+});

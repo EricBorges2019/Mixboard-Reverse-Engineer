@@ -25,3 +25,16 @@ describe('parseSse', () => {
     expect(await collect(stream(['data: x\n\ndata: unfinished']))).toEqual([{ event: 'message', data: 'x' }]);
   });
 });
+
+describe('parseSse cancellation', () => {
+  it('cancels the body when the consumer stops early', async () => {
+    let cancelled = false;
+    const enc = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(c) { c.enqueue(enc.encode('event: a\ndata: 1\n\n')); },
+      cancel() { cancelled = true; },
+    });
+    for await (const _e of parseSse(body)) break;
+    expect(cancelled).toBe(true);
+  });
+});

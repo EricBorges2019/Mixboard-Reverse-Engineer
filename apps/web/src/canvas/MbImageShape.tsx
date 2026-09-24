@@ -45,7 +45,7 @@ export class MbImageShapeUtil extends BaseBoxShapeUtil<MbImageShape> {
             <div>Generation failed</div>
             <button
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => window.dispatchEvent(new CustomEvent('mb:regenerate', { detail: { blockId: blockIdFromShapeId(shape.id), name: title } }))}
+              onClick={() => window.dispatchEvent(new CustomEvent('mb:regenerate', { detail: { blockId: (shape.meta.blockId as string | undefined) ?? blockIdFromShapeId(shape.id), name: title } }))}
             >
               Regenerate
             </button>

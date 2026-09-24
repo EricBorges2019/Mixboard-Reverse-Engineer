@@ -31,7 +31,7 @@ export function blockIdFromShapeId(shapeId: string): string {
 /**
  * Converts a block into the input for a tldraw shape: images become `mb-image`, text becomes tldraw's native `text` shape.
  * Precondition: `block` is hydrated (resources included).
- * Postcondition: returns a shape input whose `meta.blockId` links it back to the block. Images show the caption title as their label (falling back to the block name) and an empty `src` until a file exists. Text blocks use the stored rich text (bare or wrapped form) or an empty document.
+ * Postcondition: returns a shape input whose `meta.blockId` links it back to the block. Images show the caption title as their label (falling back to the block name) and an empty `src` until a file exists. Text blocks use the stored rich text (bare or wrapped form) or an empty document, plus the saved `scale` and `autoSize`; `w` is the page width divided by `scale`.
  */
 export function blockToShapeInput(block: Block): ShapeInput {
   const common = { id: shapeIdFor(block.id), x: block.rect.x, y: block.rect.y, meta: { blockId: block.id } };
@@ -42,14 +42,16 @@ export function blockToShapeInput(block: Block): ShapeInput {
       props: { w: block.rect.w, h: block.rect.h, src: resource ? fileUrl(resource.id) : '', title: resource?.caption?.title || block.name, status: block.status },
     };
   }
-  const content = block.resources.find((r) => r.kind === 'text')?.content as { scale?: unknown } | null | undefined;
+  const content = block.resources.find((r) => r.kind === 'text')?.content as { scale?: unknown; autoSize?: unknown } | null | undefined;
+  const scale = typeof content?.scale === 'number' && content.scale > 0 ? content.scale : 1;
   return {
     ...common, type: 'text',
     props: {
       richText: unwrapTextContent(content) ?? plainTextToDoc(''),
-      scale: typeof content?.scale === 'number' ? content.scale : 1,
-      autoSize: false,
-      w: block.rect.w,
+      scale,
+      autoSize: content?.autoSize === true,
+      // The block rect is in page units; tldraw's `w` is before scaling.
+      w: block.rect.w / scale,
     },
   };
 }

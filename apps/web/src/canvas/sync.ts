@@ -30,27 +30,63 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Per-editor view of unsent user edits, so server updates do not overwrite them. Registered by attachBoardSync. */
+interface PendingEdits { rect(blockId: string): boolean; text(blockId: string): boolean }
+const pendingEdits = new WeakMap<Editor, PendingEdits>();
+
+/**
+ * Finds the shape linked to a block. Shapes loaded from the server use `shapeIdFor(blockId)`; shapes the user made
+ * (drawn text, duplicates, pastes) keep tldraw's own id and are linked only through `meta.blockId`.
+ * Precondition: `editor` is mounted.
+ * Postcondition: returns the linked shape's id, or null when no shape on the current page is linked to `blockId`.
+ */
+function findShapeId(editor: Editor, blockId: string): string | null {
+  const direct = editor.getShape(shapeIdFor(blockId) as never);
+  if (direct && direct.meta.blockId === blockId) return direct.id;
+  return editor.getCurrentPageShapes().find((shape) => shape.meta.blockId === blockId)?.id ?? null;
+}
+
 /**
  * Creates or updates the shape for a block without marking the change as a user edit (so it is not sent back to the server).
  * Precondition: `editor` is mounted.
- * Postcondition: the shape for `block` exists on the current page with the block's data.
+ * Postcondition: the shape for `block` exists on the current page with the block's data, except that a position/size or
+ * text edit the user has not saved yet is kept rather than overwritten (the pending save then wins on the server too).
  */
 export function upsertBlock(editor: Editor, block: Block): void {
   const input = blockToShapeInput(block);
+  const existing = findShapeId(editor, block.id);
+  const pending = pendingEdits.get(editor);
   editor.store.mergeRemoteChanges(() => {
-    if (editor.getShape(input.id as never)) editor.updateShape(asPartial(input));
-    else editor.createShape(asPartial(input));
+    if (!existing) {
+      editor.createShape(asPartial(input));
+      return;
+    }
+    const props: Record<string, unknown> = { ...input.props };
+    const update: Record<string, unknown> = { ...input, id: existing, props };
+    if (pending?.rect(block.id)) {
+      delete update.x;
+      delete update.y;
+      delete props.w;
+      delete props.h;
+    }
+    if (pending?.text(block.id)) {
+      delete props.richText;
+      delete props.scale;
+      delete props.autoSize;
+      delete props.w;
+    }
+    editor.updateShape(update as never);
   });
 }
 
 /**
  * Removes the shape for a block without marking the change as a user edit.
  * Precondition: `editor` is mounted.
- * Postcondition: no shape for `blockId` remains.
+ * Postcondition: no shape linked to `blockId` remains.
  */
 export function removeBlockShape(editor: Editor, blockId: string): void {
-  const id = shapeIdFor(blockId) as never;
-  if (editor.getShape(id)) editor.store.mergeRemoteChanges(() => editor.deleteShape(id));
+  const id = findShapeId(editor, blockId);
+  if (id) editor.store.mergeRemoteChanges(() => editor.deleteShape(id as never));
 }
 
 /**
@@ -121,6 +157,39 @@ export function attachBoardSync(editor: Editor, board: Board, options: SyncOptio
   const patches = createBatcher<BlockPatch>(flushPatches, 400, (a, b) => ({ ...a, ...b }));
   const texts = createBatcher<unknown>(flushTexts, 600);
   const viewport = createBatcher<Viewport>(flushViewport, 500);
+  pendingEdits.set(editor, {
+    /**
+     * Tells whether a rect or z-index patch for a block is still waiting to be sent.
+     * Precondition: none.
+     * Postcondition: returns true while one is queued.
+     */
+    rect: (id) => patches.has(id),
+    /**
+     * Tells whether a text save for a block is still waiting to be sent.
+     * Precondition: none.
+     * Postcondition: returns true while one is queued.
+     */
+    text: (id) => texts.has(id),
+  });
+
+  /**
+   * Sets a shape's block link without it counting as a user edit.
+   * Precondition: `shapeId` names a shape of type `type`.
+   * Postcondition: the shape's `meta.blockId` is `blockId`, or removed when `blockId` is null.
+   */
+  function setLink(shapeId: string, type: string, blockId: string | null): void {
+    editor.store.mergeRemoteChanges(() => editor.updateShape({ id: shapeId, type, meta: blockId ? { blockId } : {} } as never));
+  }
+
+  /**
+   * Reads a shape's current page rect in block form.
+   * Precondition: none.
+   * Postcondition: returns the rect (at least 1x1), or null when the shape no longer exists.
+   */
+  function pageRect(shapeId: string): Block['rect'] | null {
+    const b = editor.getShapePageBounds(shapeId as never);
+    return b ? { x: b.x, y: b.y, w: Math.max(1, b.w), h: Math.max(1, b.h) } : null;
+  }
 
   /**
    * Queues z-index patches from the current stacking order.
@@ -136,22 +205,36 @@ export function attachBoardSync(editor: Editor, board: Board, options: SyncOptio
   }
 
   /**
-   * Turns a text shape the user just created into a text block.
-   * Precondition: `shape` is a `text` shape without `meta.blockId`.
-   * Postcondition: a block exists and the shape is linked to it with its current text saved; if the shape vanished meanwhile (tldraw removes empty text shapes) the block is deleted again. Failures are reported.
+   * Gives a shape the user just added (drawn, duplicated, pasted, or brought back by undo) a block of its own.
+   * Copies carry the original's `meta.blockId`, so the link is removed first; until the new block exists the shape is
+   * unlinked and its edits are not sent anywhere.
+   * Precondition: `shape` is a `text` or `mb-image` shape added by a user action.
+   * Postcondition: a new block exists, the shape links to it, and its current text, image and rect are saved. If the shape
+   * vanished meanwhile (tldraw removes empty text shapes) the new block is deleted again. Failures are reported.
    */
-  async function createTextBlock(shape: RecordLike): Promise<void> {
+  async function linkNewShape(shape: RecordLike): Promise<void> {
+    setLink(shape.id, shape.type!, null);
     try {
-      const bounds = editor.getShapePageBounds(shape.id as never);
-      if (!bounds) return;
-      const block = await api.createBlock(board.id, { type: 'text', rect: { x: bounds.x, y: bounds.y, w: Math.max(1, bounds.w), h: Math.max(1, bounds.h) } });
+      const rect = pageRect(shape.id);
+      if (!rect) return;
+      const isImage = shape.type === 'mb-image';
+      const created = await api.createBlock(board.id, isImage
+        ? { type: 'image', name: shape.props?.title ?? '', rect, status: shape.props?.status === 'error' ? 'error' : 'ready' }
+        : { type: 'text', rect });
       const latest = editor.getShape(shape.id as never) as unknown as RecordLike | undefined;
       if (!latest) {
-        await api.deleteBlock(block.id);
+        await api.deleteBlock(created.id);
         return;
       }
-      editor.store.mergeRemoteChanges(() => editor.updateShape({ id: shape.id, type: 'text', meta: { blockId: block.id } } as never));
-      await api.patchBlockText(block.id, textShapeToContent(latest.props));
+      setLink(shape.id, shape.type!, created.id);
+      const latestRect = pageRect(shape.id);
+      if (latestRect) patches.queue(created.id, { rect: latestRect });
+      if (!isImage) {
+        await api.patchBlockText(created.id, textShapeToContent(latest.props));
+      } else if (latest.props?.src) {
+        const blob = await (await fetch(latest.props.src)).blob();
+        upsertBlock(editor, await api.uploadImage(created.id, new File([blob], created.name || 'image', { type: blob.type })));
+      }
     } catch (err) {
       report(err);
     }
@@ -188,28 +271,34 @@ export function attachBoardSync(editor: Editor, board: Board, options: SyncOptio
   /**
    * Reacts to user edits of shapes.
    * Precondition: `entry` is a tldraw store change from a user action.
-   * Postcondition: new unlinked text shapes become blocks; moved/resized shapes queue rect patches; reordered shapes queue z-index patches; edited text queues a content save; deleted linked shapes delete their blocks.
+   * Postcondition: every added text or image shape gets a new block; moved/resized shapes queue rect patches; reordered shapes queue z-index patches; edited or rescaled text queues a content save; deleted linked shapes drop their pending saves and delete their blocks.
    */
   function handleDocumentChange(entry: StoreEntry): void {
     for (const rec of Object.values(entry.changes.added)) {
-      if (rec.typeName === 'shape' && rec.type === 'text' && !rec.meta?.blockId) void createTextBlock(rec);
+      if (rec.typeName === 'shape' && (rec.type === 'text' || rec.type === 'mb-image')) void linkNewShape(rec);
     }
     let reordered = false;
     for (const [from, to] of Object.values(entry.changes.updated)) {
       const blockId = to.typeName === 'shape' ? (to.meta?.blockId as string | undefined) : undefined;
       if (!blockId) continue;
-      const moved = from.x !== to.x || from.y !== to.y || from.props?.w !== to.props?.w || from.props?.h !== to.props?.h;
+      const textChanged = to.type === 'text' &&
+        (from.props?.richText !== to.props?.richText || from.props?.scale !== to.props?.scale || from.props?.autoSize !== to.props?.autoSize);
+      // Typing into an auto-sized text or scaling it changes its size without touching x/y/w.
+      const moved = textChanged || from.x !== to.x || from.y !== to.y || from.props?.w !== to.props?.w || from.props?.h !== to.props?.h;
       if (moved) {
-        const b = editor.getShapePageBounds(to.id as never);
-        if (b) patches.queue(blockId, { rect: { x: b.x, y: b.y, w: Math.max(1, b.w), h: Math.max(1, b.h) } });
+        const rect = pageRect(to.id);
+        if (rect) patches.queue(blockId, { rect });
       }
       if (from.index !== to.index) reordered = true;
-      if (to.type === 'text' && from.props?.richText !== to.props?.richText) texts.queue(blockId, textShapeToContent(to.props));
+      if (textChanged) texts.queue(blockId, textShapeToContent(to.props));
     }
     if (reordered) queueZOrder();
     for (const rec of Object.values(entry.changes.removed)) {
       const blockId = rec.typeName === 'shape' ? (rec.meta?.blockId as string | undefined) : undefined;
-      if (blockId) api.deleteBlock(blockId).catch(report);
+      if (!blockId) continue;
+      patches.cancel(blockId);
+      texts.cancel(blockId);
+      api.deleteBlock(blockId).catch(report);
     }
   }
 
@@ -227,6 +316,7 @@ export function attachBoardSync(editor: Editor, board: Board, options: SyncOptio
   const stopDocument = editor.store.listen(handleDocumentChange as never, { source: 'user', scope: 'document' });
   const stopSession = editor.store.listen(handleSessionChange as never, { source: 'user', scope: 'session' });
   return () => {
+    pendingEdits.delete(editor);
     stopDocument();
     stopSession();
     patches.flushNow();
