@@ -211,7 +211,6 @@ Aspect ratio → initial size → code:
 
 For a new AI image, index 8 is `null` and index 9 holds the prompt, until the caption arrives (section 6).
 
-### Resource — text
 **Sketch annotations** (captured 2026-09-24 01:21:55): drawing on an image and saving writes the block with `nMLvne` mask `[["resources"]]` and a resource carrying three extra fields:
 
 | Index | Field |
@@ -222,6 +221,7 @@ For a new AI image, index 8 is `null` and index 9 holds the prompt, until the ca
 
 Index 7 (original URL) and captions 8–9 are unchanged, so the original image survives and the annotation is a separate layer. The block's rect in the request was `[0,0,0,0]` and ignored (mask is `resources` only). For the clone this maps to a tldraw drawing layer stored with the image plus a flattened export.
 
+### Resource — text
 
 `[projectId, boardId, blockId, resourceId, content, null, "text/plain"]`. `content` is a ProseMirror/TipTap doc, either bare `{"type":"doc",…}` or wrapped `{"richText":{…},"scale":1,"autoSize":false}`. Read both. The client itself wrote a bare doc with `attrs` (`{"type":"doc","attrs":{"dir":"auto"},"content":[{"type":"paragraph","attrs":{"dir":"auto","textAlign":null},…}]}`) for a new text block, and the wrapped form after an agent `update_text_block`. Our clone writes the wrapped form.
 
