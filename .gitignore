@@ -13,3 +13,6 @@
 # Local secrets and OS files
 .env
 .DS_Store
+
+# Beads / Dolt files (added by bd init)
+*.gate.lock*
