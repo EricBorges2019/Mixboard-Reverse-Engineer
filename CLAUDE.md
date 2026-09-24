@@ -1,6 +1,6 @@
-# Project Instructions for AI Agents
+# CLAUDE.md
 
-This file provides instructions and context for AI coding agents working on this project.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker
@@ -58,20 +58,25 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 <!-- END BEADS INTEGRATION -->
 
 
-## Build & Test
+## Project state
 
-_Add your build and test commands here_
+This repo is currently a **reverse-engineering research phase**, not an application. There is no build, lint, or test tooling yet — that gets added once implementation starts. Do not invent build/test commands; check back here once code exists.
 
-```bash
-# Example:
-# npm install
-# npm test
-```
+## What this project is
 
-## Architecture Overview
+Cloning Google Mixboard (an AI concepting canvas shutting down 2026-09-28) before it disappears, including its prompts. Read **`SPEC.md` first, in full, before any implementation work** — it is the single source of truth, assembled from two HAR captures and a decompiled frontend chunk, and is kept up to date as new findings land. Its "Open gaps" section (§9) lists what's still unknown; don't assume a gap is filled without checking there.
 
-_Add a brief overview of your project architecture_
+## Repo layout
 
-## Conventions & Patterns
+- `SPEC.md` — the spec. Wire protocol (batchexecute RPCs), data model (Project → Board → Block → Resource, all positional arrays), the agent's skill/tool system, and product decisions already made (D1, D2 in §2).
+- `captures/agent-calls-decoded.txt` — every captured agent call, decoded: user message, tagline, tool calls/results, final text. Primary evidence for agent behavior.
+- `captures/rpc-samples.txt` — 2 request/response samples per `batchexecute` RPC. Primary evidence for the wire protocol.
+- `prompts/skills/*.md` — recovered `SKILL.md` files for the agent's tool-skills (currently `image-generation-intent-skill.md`, `style-skill.md`). Treated as verbatim/real, not paraphrased, because they match traffic exactly.
+- `mixboard.google.com.har`, `mixboard.google.com_learnstyle.har` — raw HAR captures. The learnstyle HAR is a superset (same session, plus the style-learning call). Contain no auth data was already stripped in `captures/`; treat the raw HARs themselves as sensitive and don't publish them.
+- `issues.jsonl` — beads export artifact, not for manual editing (see Beads section above).
 
-_Add your project-specific conventions here_
+## Working with the evidence
+
+- When SPEC.md and a capture file disagree, the capture is ground truth — update SPEC.md, don't trust its summary over the raw evidence.
+- New findings (e.g. recovering another skill's `SKILL.md`, resolving an "Open gap") belong in `SPEC.md`, in the section they clarify, not as a separate notes file.
+- Positional array fields in the data model (Project/Board/Block/Resource) are index-based and partially unconfirmed ("?" in SPEC.md tables) — verify against `captures/rpc-samples.txt` before relying on an unconfirmed index.
