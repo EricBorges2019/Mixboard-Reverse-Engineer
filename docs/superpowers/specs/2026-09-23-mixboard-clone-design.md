@@ -166,8 +166,8 @@ Open, to settle in the plan or a spike:
 1. Whether each candidate image model (`google/gemini-3.1-flash-image`, `openai/gpt-image-2.5-flare`)
    honors `image_config.aspect_ratio` for all five ratios. The plan's Task 6 probe answers this.
    Unsupported ratios are generated at the nearest supported one and the block keeps its shape.
-2. Whether tldraw's `richText` is stored as a document object or a JSON string.
-3. tldraw version pin (docs seen were 4.2.0; the original used 4.3.0).
+2. ~~Whether tldraw's `richText` is stored as a document object or a JSON string.~~ Settled (Task 13 spike): a TipTap doc object.
+3. ~~tldraw version pin~~ Settled: `~4.3.0` (installed 4.3.3). Custom shapes must be registered on `TLGlobalShapePropsMap` (module augmentation) for `BaseBoxShapeUtil` to typecheck.
 4. The persona prompt, the tagline prompt and four skills (`text-generation-skill`,
    `core-board-skill`, `clarification-skill`, `board-starter-skill`) are reconstructions
    (SPEC §9); the wording is ours. The caption prompt is recovered verbatim.
