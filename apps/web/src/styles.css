@@ -1,0 +1,4 @@
+:root { font-family: system-ui, sans-serif; color: #1a1a1a; }
+html, body, #root { margin: 0; height: 100%; }
+body { background: #f6f5f3; }
+button { font: inherit; cursor: pointer; }

@@ -11,12 +11,12 @@ export function blockRef(id: string, name: string): string {
 
 /**
  * Splits chat text into plain and reference segments.
- * Precondition: none.
+ * Precondition: none. Names may contain single `]` but not `]]`.
  * Postcondition: concatenating the segments' text (refs re-formatted) reproduces `text`; empty text segments are omitted.
  */
 export function splitBlockRefs(text: string): RefSegment[] {
   const out: RefSegment[] = [];
-  const re = /\[\[id:([^|\]]+)\|name:([^\]]*)\]\]/g;
+  const re = /\[\[id:([^|\]]+)\|name:((?:(?!\]\]).)*)\]\]/g;
   let last = 0;
   for (const m of text.matchAll(re)) {
     if (m.index > last) out.push({ type: 'text', text: text.slice(last, m.index) });
