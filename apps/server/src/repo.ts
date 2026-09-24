@@ -481,14 +481,16 @@ export class Repo {
   }
 
   /**
-   * Merges a patch into stored settings.
+   * Merges a patch into the stored overrides, so unset keys keep following the config defaults.
    * Precondition: `patch` satisfies SettingsPatch.
-   * Postcondition: the merged settings are persisted and returned.
+   * Postcondition: only user-set keys are persisted; the resolved settings are returned.
    */
   updateSettings(patch: SettingsPatch): Settings {
-    const cur = this.getSettings();
-    const next: Settings = { puns: patch.puns ?? cur.puns, models: { ...cur.models, ...patch.models } };
+    const r = this.one("SELECT value FROM settings WHERE key='settings'");
+    const stored = r ? (JSON.parse(r.value) as SettingsPatch) : {};
+    const next: SettingsPatch = { ...stored, ...(patch.puns !== undefined && { puns: patch.puns }) };
+    if (stored.models || patch.models) next.models = { ...stored.models, ...patch.models };
     this.run("INSERT INTO settings (key,value) VALUES ('settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", JSON.stringify(next));
-    return next;
+    return this.getSettings();
   }
 }

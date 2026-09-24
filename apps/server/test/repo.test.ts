@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { NotFoundError } from '../src/repo';
+import { NotFoundError, Repo } from '../src/repo';
 import { defaultSettings, makeRepo } from './helpers';
 
 const rect = { x: 0, y: 0, w: 100, h: 50 };
@@ -91,5 +91,18 @@ describe('Repo', () => {
     expect(s.puns).toBe(true);
     expect(s.models).toEqual({ ...defaultSettings.models, image: 'x/y' });
     expect(repo.getSettings()).toEqual(s);
+  });
+});
+
+describe('review fixes', () => {
+  it('keeps unset model ids following the defaults after a puns-only save', () => {
+    const { repo } = makeRepo();
+    repo.updateSettings({ puns: true });
+    const other = new Repo((repo as any).db, (repo as any).filesDir, {
+      ...defaultSettings,
+      models: { ...defaultSettings.models, image: 'new/image' },
+    });
+    expect(other.getSettings().models.image).toBe('new/image');
+    expect(other.getSettings().puns).toBe(true);
   });
 });

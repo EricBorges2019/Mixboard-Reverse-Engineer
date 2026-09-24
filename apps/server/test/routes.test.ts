@@ -102,3 +102,24 @@ describe('routes', () => {
     ]);
   });
 });
+
+describe('review fixes', () => {
+  it('rejects text patches on image blocks', async () => {
+    const { call } = setup();
+    const { board } = await (await call('POST', '/api/projects')).json();
+    const block = await (await call('POST', `/api/boards/${board.id}/blocks`, { type: 'image', rect: { x: 0, y: 0, w: 10, h: 10 } })).json();
+    expect((await call('PATCH', `/api/blocks/${block.id}/text`, { content: { type: 'doc' } })).status).toBe(400);
+    expect((await call('GET', `/api/boards/${board.id}`).then((r) => r.json())).blocks[0].resources).toEqual([]);
+  });
+
+  it('rejects svg uploads and serves files with nosniff', async () => {
+    const { call } = setup();
+    const { board } = await (await call('POST', '/api/projects')).json();
+    const block = await (await call('POST', `/api/boards/${board.id}/blocks`, { type: 'image', rect: { x: 0, y: 0, w: 10, h: 10 } })).json();
+    expect((await call('PUT', `/api/blocks/${block.id}/image`, new Uint8Array([1]), { 'content-type': 'image/svg+xml' })).status).toBe(415);
+    const ok = await (await call('PUT', `/api/blocks/${block.id}/image`, new Uint8Array([1, 2]), { 'content-type': 'image/png' })).json();
+    const res = await call('GET', `/api/files/${ok.resources[0].id}`);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('content-security-policy')).toBe('sandbox');
+  });
+});

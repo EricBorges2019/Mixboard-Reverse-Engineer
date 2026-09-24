@@ -5,6 +5,7 @@ import type { AppDeps } from '../app';
 import { HttpError } from '../errors';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
 /**
  * Registers block, upload, file and caption routes.
@@ -16,6 +17,7 @@ export function registerBlockRoutes(app: Hono, { repo, onImageAdded }: AppDeps):
   app.patch('/api/blocks/:id', async (c) => c.json(repo.patchBlock(c.req.param('id'), await c.req.json())));
   app.patch('/api/blocks/:id/text', async (c) => {
     const { content } = z.object({ content: z.unknown() }).parse(await c.req.json());
+    if (repo.getBlock(c.req.param('id')).type !== 'text') throw new HttpError(400, 'Block is not a text block');
     repo.updateTextContent(c.req.param('id'), content);
     return c.json(repo.getBlock(c.req.param('id')));
   });
@@ -27,7 +29,7 @@ export function registerBlockRoutes(app: Hono, { repo, onImageAdded }: AppDeps):
     const block = repo.getBlock(c.req.param('id'));
     const mimeType = (c.req.header('content-type') ?? '').split(';')[0].trim();
     if (block.type !== 'image') throw new HttpError(400, 'Block is not an image block');
-    if (!mimeType.startsWith('image/')) throw new HttpError(415, 'Only image uploads are accepted');
+    if (!ALLOWED_IMAGE_TYPES.has(mimeType)) throw new HttpError(415, 'Only image uploads are accepted');
     if (Number(c.req.header('content-length') ?? 0) > MAX_IMAGE_BYTES) throw new HttpError(413, 'Image is larger than 20 MB');
     const bytes = Buffer.from(await c.req.arrayBuffer());
     if (bytes.length === 0) throw new HttpError(400, 'Empty upload');
@@ -41,7 +43,7 @@ export function registerBlockRoutes(app: Hono, { repo, onImageAdded }: AppDeps):
   app.get('/api/files/:resourceId', (c) => {
     const file = repo.readResourceBytes(c.req.param('resourceId'));
     if (!file) return c.json({ error: 'File not found' }, 404);
-    return c.body(new Uint8Array(file.bytes), 200, { 'content-type': file.mimeType, 'cache-control': 'private, max-age=31536000, immutable' });
+    return c.body(new Uint8Array(file.bytes), 200, { 'content-type': file.mimeType, 'cache-control': 'private, max-age=31536000, immutable', 'x-content-type-options': 'nosniff', 'content-security-policy': 'sandbox' });
   });
   app.patch('/api/resources/:id/caption', async (c) => {
     const caption = z.object({ title: z.string(), description: z.string() }).parse(await c.req.json());
