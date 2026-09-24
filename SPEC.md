@@ -5,6 +5,7 @@ Last updated 2026-09-23. Sources: the claude.ai project "reverse-engineering Goo
 Decoded extracts (no auth data) are in `captures/`:
 
 - `captures/agent-calls-decoded.txt` — every agent call: user message, tagline, tool calls, tool results, final text
+- `prompts/style-presets.md` — the 73 style presets from the page bootstrap data (§7.10)
 - `captures/rpc-samples.txt` — 2 request/response samples per batchexecute RPC
 
 The two HARs are one session: the learnstyle HAR contains everything in the first one, plus the style-learning call at the end.
@@ -158,7 +159,7 @@ Positional arrays. "?" = not confirmed.
 | 6 | `1` in requests, `true` in responses; probably "has thumbnail" |
 | 7 | thumbnail URL (response): `…/projects/<id>/thumbnail/<updatedAt in ms>`. The number is the project's updatedAt (`[1790213719,451116000]` → `1790213719451`), so it acts as a cache-buster; the client GETs it after each `dmKd` |
 | 8 | thumbnail base64 JPEG (request, `dmKd`); `null` in responses |
-| 9 | presentations `[[presentationId, projectId, status, null, "", 1]]`; status `1` right after `vZrjA`, `4` once generated (response only) |
+| 9 | presentations `[[presentationId, projectId, status, null, "", 1]]`; status `1` right after `vZrjA`, `4` about 15 min later (meaning unconfirmed: done or failed) |
 
 ### Board
 
@@ -449,6 +450,15 @@ Style agent: `save_style` "💾 Bottling up your aesthetic...", `get_style` "�
 - A plain "describe the board" turn makes no tool calls: board context is injected server-side. Not captured: `get_spatial_context`, `get_style`, `delete_style`, `update_image_block`.
 - Image edit is not an agent tool (see §4.5).
 
+### 7.10 Style presets (`WIZ_global_data.Kkbn8e`)
+
+The page bootstrap object `window.WIZ_global_data` (inline in the initial HTML, not fetched over RPC) has a key `Kkbn8e` holding **73 named style presets**. Full table: `prompts/style-presets.md`. Each value is `[displayName, positiveTemplate, negativeTemplate]`, where `{prompt}` is the user's subject. The templates use Stable-Diffusion-style idioms (weighted tokens like `(realistic:1.5)`, long negative lists), unlike the single-sentence prompts in captured `create_image_block` calls.
+
+- These are separate from learned styles (§7.4, `save_style`). Presets are fixed and client-side; learned styles are per-board artifacts.
+- Confirmed use: the presentation call `vZrjA` sends a preset name (§8.1, "Intricate Detailed Painting" is a key here).
+- Not confirmed: whether an image style picker exists, and whether picking a preset puts its expanded template into the `style` arg of `create_image_block`. No such call is in the captures.
+- `WIZ_global_data` also holds an API key, a session token and account IDs. Never copy the whole object into the repo; keep only `Kkbn8e`.
+
 ## 8. Other features seen in JS (scope TBD)
 
 - Export menu: **Context Cartridge** ("Take your context to another AI"), **Smart PDF** ("Clean, editorial layout"), **Presentation Slides** ("Generate a deck"). A "webpage" export appeared in JS but is not in the UI; skip it. Details in §8.1.
@@ -485,7 +495,7 @@ The block list is every block on the board. The agent answers with a tagline, th
 
 The first generation started with `> ` blockquote markers in the header and the regeneration dropped them, so the model does not follow the layout rigidly.
 
-**Presentation** (`vZrjA`): the UI asks for a prompt and a style name (here "Intricate Detailed Painting"), the client makes the presentation id, and generation runs asynchronously on the server (about 15 minutes in practice). The prompt in this capture was model-suggested ("Create a 15-minute presentation about …"). Result format: not captured yet.
+**Presentation** (`vZrjA`): the UI asks for a prompt and a style name (here "Intricate Detailed Painting", a preset from §7.10), the client makes the presentation id, and generation runs asynchronously on the server (about 15 minutes in practice). The prompt in this capture was model-suggested ("Create a 15-minute presentation about …"). Result format: not captured yet.
 
 ### 8.2 Thumbnail and viewport are not agent context (tested)
 
@@ -498,6 +508,7 @@ Closed by the 2026-09-24 recapture: the image-edit call (§4.5), `update_text_bl
 - **SKILL.md text** for `text-generation-skill`, `core-board-skill`, `clarification-skill`, `spatial-awareness-skill`, `board-starter-skill`, and the owner of `remove_background` / `create_document_block` / `create_table_block`. The client never receives skill bodies, so these can only be rewritten. Tool-to-skill mapping is known from `list_skills`.
 - The system prompt and the tagline prompt. Both are server-side; no JS chunk contains them. Direct asks are refused.
 - Image-generation model (C2PA points to a Google image model). No model name appears in the client.
-- Not captured: `update_image_block`, `get_spatial_context`, `get_style`/`delete_style`, the write-back after an image edit, the finished presentation (`vZrjA` only starts it), `TEbwnd` response.
+- Not captured: `update_image_block`, `get_spatial_context`, `get_style`/`delete_style`, the write-back after an image edit, the finished presentation (`vZrjA` only starts it; in the user's tests on 2026-09-24 generation spun for 30+ minutes and never finished, and reloading restarted the timer, so the feature appears broken at shutdown time; presentation is out of scope for v1), `TEbwnd` response.
+- Where the 73 style presets (§7.10) appear in the UI, and whether they feed `create_image_block`.
 - Export menu strings were not found in any downloaded chunk; probably a lazily loaded chunk.
 - Unknown fields, unchanged after recapture: project 5–6 (always `1,1`), board 5–9 (always null; index 10 is a per-board token), block 7/9/12 (null on every block seen, user and AI). Block 13 is null for uploads and text.
