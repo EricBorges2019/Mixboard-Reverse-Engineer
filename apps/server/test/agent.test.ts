@@ -101,6 +101,18 @@ describe('runAgent', () => {
     expect((s.repo.listMessages(s.board.id) as any[]).at(-1).role).toBe('tool');
   });
 
+  it('keeps the board-starter skill loaded for the turn after the clarification answers', async () => {
+    const q = { question: 'Focus?', suggestions: ['a', 'b', 'c', 'd'] };
+    const s = await setup([
+      chatReply({ tool_calls: [{ name: 'ask_clarification', args: { questions: [q, { ...q, question: 'Style?' }] } }] }),
+      chatReply({ content: 'ok' }),
+    ]);
+    await s.run({ shortcut: 3, message: 'a fantasy town board' });
+    await s.run({ message: 'castles; watercolor' });
+    expect(s.fake.requests[1].messages[0].content).toContain('Kick-start an empty board');
+    expect(s.toolNames(1)).toContain('ask_clarification');
+  });
+
   it('ignores the onboarding shortcut on a board that already has blocks', async () => {
     const s = await setup([chatReply({ content: 'ok' })]);
     s.repo.createBlock(s.board.id, { type: 'text', rect: { x: 0, y: 0, w: 10, h: 10 } });

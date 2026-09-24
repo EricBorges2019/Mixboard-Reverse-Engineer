@@ -107,3 +107,16 @@ describe('remove_background', () => {
     expect(c.repo.getBoard(c.board.id).blocks).toHaveLength(2);
   });
 });
+
+describe('abort during generation', () => {
+  it('does not leave the block generating forever', async () => {
+    const ac = new AbortController();
+    const llm = new ScriptedLlm([], async () => { ac.abort(); throw new Error('aborted'); });
+    const c = makeCtx({ llm });
+    c.ctx.signal = ac.signal;
+    await expect(tool('create_image_block').run({ prompt: 'x' }, c.ctx)).rejects.toThrow();
+    const blocks = c.repo.getBoard(c.board.id).blocks;
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].status).toBe('error');
+  });
+});

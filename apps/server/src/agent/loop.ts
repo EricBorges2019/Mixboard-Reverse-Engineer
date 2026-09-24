@@ -69,7 +69,8 @@ export async function runAgent(input: { req: AgentRunRequest; deps: AgentDeps; e
   const settings = repo.getSettings();
   const board = repo.getBoard(req.boardId);
   const history = repo.listMessages(req.boardId) as ChatMessage[];
-  const onboarding = req.shortcut === 3 && board.blocks.length === 0 && history.length === 0;
+  const askedClarification = history.some((m) => m.role === 'assistant' && m.tool_calls?.some((t) => t.function.name === 'ask_clarification'));
+  const onboarding = board.blocks.length === 0 && ((req.shortcut === 3 && history.length === 0) || askedClarification);
   const preloaded = onboarding ? ['board-starter-skill', 'clarification-skill'] : req.shortcut === 1 ? ['style-skill'] : [];
   const session: AgentSession = { loadedSkills: new Set(preloaded), onboarding, endTurn: false };
   const ctx: ToolContext = {

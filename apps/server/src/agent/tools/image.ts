@@ -77,8 +77,11 @@ async function generateIntoBlock(
     ctx.onImageAdded(resource.id);
     return { block_id: block.id, name: block.name };
   } catch (err) {
-    if (ctx.signal.aborted) throw err;
     const keepsImage = block.resources.some((r) => r.kind === 'image');
+    if (ctx.signal.aborted) {
+      ctx.repo.setBlockStatus(block.id, keepsImage ? 'ready' : 'error');
+      throw err;
+    }
     ctx.emit({ type: 'block', block: ctx.repo.setBlockStatus(block.id, keepsImage ? 'ready' : 'error'), isPlaceholder: false });
     return { error: `Image generation failed: ${err instanceof Error ? err.message : String(err)}` };
   }
