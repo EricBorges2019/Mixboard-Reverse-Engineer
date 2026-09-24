@@ -1,4 +1,6 @@
 import { createRoot } from 'react-dom/client';
+import { App } from './App';
 import './styles.css';
 
-createRoot(document.getElementById('root')!).render(<h1>Mixboard Clone</h1>);
+// No StrictMode: it mounts effects twice in development, which would attach the canvas sync twice.
+createRoot(document.getElementById('root')!).render(<App />);
