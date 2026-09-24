@@ -113,6 +113,13 @@ describe('runAgent', () => {
     expect(s.toolNames(1)).toContain('ask_clarification');
   });
 
+  it('still onboards when the first onboarding turn failed and the user retries', async () => {
+    const s = await setup([{ status: 500, body: { error: { message: 'boom' } } }, chatReply({ content: 'ok' })]);
+    await s.run({ shortcut: 3, message: 'a fantasy town board' });
+    await s.run({ shortcut: 3, message: 'a fantasy town board' });
+    expect(s.fake.requests[1].messages[0].content).toContain('Kick-start an empty board');
+  });
+
   it('ignores the onboarding shortcut on a board that already has blocks', async () => {
     const s = await setup([chatReply({ content: 'ok' })]);
     s.repo.createBlock(s.board.id, { type: 'text', rect: { x: 0, y: 0, w: 10, h: 10 } });

@@ -42,6 +42,20 @@ export function BoardView({ project, initialBoard, settings, updateSettings }: {
   }, [editor]);
 
   /**
+   * Records a block the user created on the canvas, so the Inspector, style learning and caption polling see it.
+   * Precondition: none.
+   * Postcondition: `blocks` contains `block` (the canvas already shows it).
+   */
+  const onCanvasBlock = useCallback((block: Block) => setBlocks((prev) => mergeBlock(prev, block)), []);
+
+  /**
+   * Forgets a block the user deleted on the canvas.
+   * Precondition: none.
+   * Postcondition: `blocks` no longer contains `blockId`.
+   */
+  const onCanvasBlockRemoved = useCallback((blockId: string) => setBlocks((prev) => prev.filter((b) => b.id !== blockId)), []);
+
+  /**
    * Reacts to an agent event.
    * Precondition: none.
    * Postcondition: `block` events add or update shapes; `block_deleted` removes them; style tool results refresh the style list.
@@ -101,7 +115,13 @@ export function BoardView({ project, initialBoard, settings, updateSettings }: {
             Unsaved changes: {saveError} <button onClick={() => setSaveError(null)}>Dismiss</button>
           </div>
         )}
-        <BoardCanvas board={initialBoard} onReady={setEditor} onSaveError={setSaveError} />
+        <BoardCanvas
+          board={initialBoard}
+          onReady={setEditor}
+          onSaveError={setSaveError}
+          onBlockUpserted={onCanvasBlock}
+          onBlockRemoved={onCanvasBlockRemoved}
+        />
       </div>
       <aside className="side">
         <nav className="tabs">

@@ -10,6 +10,10 @@ interface StoreEntry { changes: { added: Record<string, RecordLike>; updated: Re
 
 export interface SyncOptions {
   onSaveError(message: string): void;
+  /** A block the user created on the canvas (drop, paste, text tool, duplicate) exists or changed on the server. */
+  onBlockUpserted?(block: Block): void;
+  /** The user deleted a block's shape on the canvas. */
+  onBlockRemoved?(blockId: string): void;
 }
 
 /**
@@ -116,7 +120,7 @@ async function naturalSize(file: File): Promise<{ width: number; height: number 
 /**
  * Keeps the server in step with what the user does on the canvas, and lets the user drop images.
  * Precondition: `editor` is mounted and empty; `board` is the board being shown.
- * Postcondition: shapes and camera are loaded; from now on user edits are sent as debounced partial patches (rect and z-index 400 ms, text 600 ms, viewport 500 ms), user-created text shapes become text blocks, deleted shapes delete their blocks, and dropped or pasted image files become image blocks (placeholder, upload, final). Failures call `options.onSaveError`. Returns a cleanup function that stops listening and flushes pending saves.
+ * Postcondition: shapes and camera are loaded; from now on user edits are sent as debounced partial patches (rect and z-index 400 ms, text 600 ms, viewport 500 ms), user-created text shapes become text blocks, deleted shapes delete their blocks, and dropped or pasted image files become image blocks (placeholder, upload, final). Blocks the user creates or deletes are reported through `options.onBlockUpserted` / `onBlockRemoved`. Failures call `options.onSaveError`. Returns a cleanup function that stops listening and flushes pending saves.
  */
 export function attachBoardSync(editor: Editor, board: Board, options: SyncOptions): () => void {
   applyBoard(editor, board);
@@ -227,13 +231,16 @@ export function attachBoardSync(editor: Editor, board: Board, options: SyncOptio
         return;
       }
       setLink(shape.id, shape.type!, created.id);
+      options.onBlockUpserted?.(created);
       const latestRect = pageRect(shape.id);
       if (latestRect) patches.queue(created.id, { rect: latestRect });
       if (!isImage) {
         await api.patchBlockText(created.id, textShapeToContent(latest.props));
       } else if (latest.props?.src) {
         const blob = await (await fetch(latest.props.src)).blob();
-        upsertBlock(editor, await api.uploadImage(created.id, new File([blob], created.name || 'image', { type: blob.type })));
+        const uploaded = await api.uploadImage(created.id, new File([blob], created.name || 'image', { type: blob.type }));
+        upsertBlock(editor, uploaded);
+        options.onBlockUpserted?.(uploaded);
       }
     } catch (err) {
       report(err);
@@ -255,10 +262,14 @@ export function attachBoardSync(editor: Editor, board: Board, options: SyncOptio
         const rect = fitRect(await naturalSize(file), 640, { x: origin.x + offset, y: origin.y + offset });
         block = await api.createBlock(board.id, { type: 'image', name: file.name, rect, status: 'generating' });
         upsertBlock(editor, block);
-        upsertBlock(editor, await api.uploadImage(block.id, file));
+        options.onBlockUpserted?.(block);
+        const uploaded = await api.uploadImage(block.id, file);
+        upsertBlock(editor, uploaded);
+        options.onBlockUpserted?.(uploaded);
       } catch (err) {
         if (block) {
           removeBlockShape(editor, block.id);
+          options.onBlockRemoved?.(block.id);
           await api.deleteBlock(block.id).catch(() => undefined);
         }
         report(err);
@@ -298,6 +309,7 @@ export function attachBoardSync(editor: Editor, board: Board, options: SyncOptio
       if (!blockId) continue;
       patches.cancel(blockId);
       texts.cancel(blockId);
+      options.onBlockRemoved?.(blockId);
       api.deleteBlock(blockId).catch(report);
     }
   }

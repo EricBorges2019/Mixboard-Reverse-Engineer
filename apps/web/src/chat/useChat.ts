@@ -15,11 +15,13 @@ export interface UseChatOptions {
 /**
  * Chat state and the `send` action for one board.
  * Precondition: called from a component; `opts.boardId` exists.
- * Postcondition: loads the board's saved history on mount; `send(text, shortcut?)` adds the user message, streams the agent run, feeds every event to both the reducer and `opts.onEvent` (so the canvas can react), and always ends the run (a failed request becomes an error item). Unmounting or switching boards aborts a run in progress.
+ * Postcondition: loads the board's saved history on mount; `send(text, shortcut?)` adds the user message, streams the agent run, feeds every event to both the reducer and `opts.onEvent` (so the canvas can react), and always ends the run (a failed request becomes an error item). Only one run at a time: `send` while a run is in flight (for example from a canvas Regenerate button) is ignored. Unmounting or switching boards aborts a run in progress.
  */
 export function useChat(opts: UseChatOptions): { state: ChatState; send(text: string, shortcut?: 1 | 3): Promise<void> } {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const abortRef = useRef<AbortController | null>(null);
+  // A ref, not state: two clicks in one render would both see stale `running`.
+  const inFlightRef = useRef(false);
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
@@ -36,7 +38,8 @@ export function useChat(opts: UseChatOptions): { state: ChatState; send(text: st
 
   const send = useCallback(async (text: string, shortcut?: 1 | 3) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed || inFlightRef.current) return;
+    inFlightRef.current = true;
     const abort = new AbortController();
     abortRef.current = abort;
     dispatch({ type: 'send', text: trimmed });
@@ -50,6 +53,7 @@ export function useChat(opts: UseChatOptions): { state: ChatState; send(text: st
     } catch (err) {
       if (!abort.signal.aborted) dispatch({ type: 'failed', message: err instanceof Error ? err.message : String(err) });
     } finally {
+      inFlightRef.current = false;
       dispatch({ type: 'event', event: { type: 'done' } });
     }
   }, []);

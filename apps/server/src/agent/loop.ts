@@ -70,7 +70,9 @@ export async function runAgent(input: { req: AgentRunRequest; deps: AgentDeps; e
   const board = repo.getBoard(req.boardId);
   const history = repo.listMessages(req.boardId) as ChatMessage[];
   const askedClarification = history.some((m) => m.role === 'assistant' && m.tool_calls?.some((t) => t.function.name === 'ask_clarification'));
-  const onboarding = board.blocks.length === 0 && ((req.shortcut === 3 && history.length === 0) || askedClarification);
+  // A first turn that failed stores only the user message, so "no assistant reply yet" (not "no history") marks a fresh board.
+  const answeredBefore = history.some((m) => m.role === 'assistant');
+  const onboarding = board.blocks.length === 0 && ((req.shortcut === 3 && !answeredBefore) || askedClarification);
   const preloaded = onboarding ? ['board-starter-skill', 'clarification-skill'] : req.shortcut === 1 ? ['style-skill'] : [];
   const session: AgentSession = { loadedSkills: new Set(preloaded), onboarding, endTurn: false };
   const ctx: ToolContext = {

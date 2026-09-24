@@ -33,8 +33,10 @@ function setup(blocks: Block[]) {
     textOptions: { tipTapConfig: { extensions: tipTapDefaultExtensions }, addFontsFromNode: defaultAddFontsFromNode } });
   const board: Board = { id: 'bd', projectId: 'p', title: 't', viewport: { x: 0, y: 0, zoom: 1 }, blocks, createdAt: '', updatedAt: '' };
   const errors: string[] = [];
-  const stop = attachBoardSync(editor, board, { onSaveError: (m) => errors.push(m) });
-  return { editor, stop, errors };
+  const upserted: Block[] = [];
+  const removed: string[] = [];
+  const stop = attachBoardSync(editor, board, { onSaveError: (m) => errors.push(m), onBlockUpserted: (b) => upserted.push(b), onBlockRemoved: (id) => removed.push(id) });
+  return { editor, stop, errors, upserted, removed };
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -117,6 +119,16 @@ describe('board sync', () => {
     editor.undo();
     await settle();
     expect(api.createBlock).toHaveBeenCalledTimes(1);
+    stop();
+  });
+  it('tells the board view about blocks the user creates and deletes', async () => {
+    const b = block({});
+    const { editor, stop, upserted, removed } = setup([b]);
+    editor.createShape({ type: 'text', x: 5, y: 5, props: { richText: toRichText('hi') } } as never);
+    await settle(); await settle();
+    expect(upserted.map((x) => x.type)).toContain('text');
+    editor.deleteShapes([shapeIdFor(b.id) as never]);
+    expect(removed).toEqual([b.id]);
     stop();
   });
 });

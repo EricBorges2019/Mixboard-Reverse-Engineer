@@ -2,7 +2,7 @@ import { Tldraw, type Editor, type TLComponents, type TLUiOverrides } from 'tldr
 import 'tldraw/tldraw.css';
 import type { Board } from '@mixboard/shared';
 import { MbImageShapeUtil } from './MbImageShape';
-import { attachBoardSync } from './sync';
+import { attachBoardSync, type SyncOptions } from './sync';
 
 declare global {
   interface Window {
@@ -31,7 +31,7 @@ const components: TLComponents = { StylePanel: null, PageMenu: null, MainMenu: n
  * Precondition: `board` is loaded; the component is keyed by board id so it remounts per board.
  * Postcondition: renders the canvas, loads the board's blocks, keeps the server in sync, and calls `onReady` with the editor. In non-production builds the editor is also exposed as `window.__mbEditor` for tests.
  */
-export function BoardCanvas({ board, onReady, onSaveError }: { board: Board; onReady(editor: Editor): void; onSaveError(message: string): void }) {
+export function BoardCanvas({ board, onReady, ...sync }: { board: Board; onReady(editor: Editor): void } & SyncOptions) {
   return (
     <Tldraw
       shapeUtils={shapeUtils}
@@ -40,7 +40,7 @@ export function BoardCanvas({ board, onReady, onSaveError }: { board: Board; onR
       onMount={(editor) => {
         onReady(editor);
         if (import.meta.env.MODE !== 'production') window.__mbEditor = editor;
-        return attachBoardSync(editor, board, { onSaveError });
+        return attachBoardSync(editor, board, sync);
       }}
     />
   );

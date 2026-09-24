@@ -30,4 +30,11 @@ describe('ChatPanel', () => {
     fireEvent.keyDown(box, { key: 'Enter' });
     expect(send).toHaveBeenCalledWith('a fantasy town', 3);
   });
+  it('retries a failed first message on an empty board with the onboarding shortcut', () => {
+    const send = vi.fn(async () => {});
+    const s = state({ items: [{ kind: 'user', text: 'a town' }, { kind: 'error', text: 'boom' }] });
+    render(<ChatPanel chat={chatWith(s, send)} blockCount={0} onFocusBlock={() => {}} />);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Retry' }).at(-1)!);
+    expect(send).toHaveBeenCalledWith('a town', 3);
+  });
 });
