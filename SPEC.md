@@ -56,11 +56,21 @@ The payload is double-encoded (a JSON array inside a JSON string).
 | `AfaG2d` | Get project (all boards + blocks) | `[projectId]` | Project, full |
 | `dmKd` | Update project (title, timestamps, **thumbnail** as base64 JPEG in index 8) | `[null, Project]` | Project, full |
 | `wvaMS` | Update board (title, viewport). Sent on every pan/zoom. | `[null, Board]` | Board |
-| `ZWtB4` | Create block | `[null, Block]` | Block |
+| `ZWtB4` | Create block | `[null, Block]` | Block; on an undo re-create the response was `[null,null,null,null,null,[6]]` (an error code, no block) |
 | `nMLvne` | Batch update blocks, with a **field mask** per block | `[[[Block, [[mask...]]], ...]]` | Blocks |
 | `BfHe` | Delete blocks | `[[[projectId, boardId, blockId], ...]]` | `[]` |
 | `AkhG3d` | List style artifacts | `[projectId, boardId, 3]` | `[null, hasAny, [StyleArtifact...]]` |
 | `fFgggb` | Called once on board open; returned `[]` on a new board. Likely chat history. | `[boardId, projectId]` | `[]` |
+| `b0uUp` | Get artifact content (cartridge Markdown) | `[projectId, boardId, artifactId]` | `[null, "<markdown>"]` |
+| `l1p1gd` | Get artifact bytes (PDF) | `[projectId, boardId, artifactId, 2]` | `[null, "<base64>"]` |
+| `vZrjA` | Start presentation generation | `[projectId, boardId, presentationId(client UPPER UUID), prompt, 1, [styleName]]` | `[presentationId, projectId, 1, null, "", 1]`; runs async |
+| `TEbwnd` | Poll presentations for the board (assumed; body was not readable in the capture) | `[projectId, boardId]` | opaque |
+| `tKKSAb` | Get one block | `[projectId, boardId, blockId]` | Block (fetched after an image edit to read the stored result) |
+| `QY7lkf` | Called on app start with `[]`; response ~300 KB (probably the project list with thumbnails) | `[]` | opaque |
+
+`AkhG3d` takes a type as its third arg: `1` = cartridge, `2` = PDF, `3` = style. Artifact row: `[projectId, boardId, artifactId(32 hex), type, title, <content>, mime, [blockIds included…]]`. Content is Markdown for the cartridge (`text/markdown`) and base64 for the PDF (`application/pdf`; about 23 MB, listed inline).
+
+Errors: a failed call returns `[["wrb.fr","<rpc>",null,null,null,[<code>],"generic"]]`. Code `5` was seen on `nMLvne` (probably NOT_FOUND) and `6` on `ZWtB4`. In the capture the client sent the projectId as blockId after an agent `update_text_block`; the server rejected it (client bug, don't copy).
 
 Field-mask values seen in `nMLvne`: `position`, `z_index`, `resources` (combinations: `[z_index]`, `[position, z_index]`, `[position, z_index, resources]`, `[resources]`, `[position]`).
 
@@ -95,7 +105,7 @@ Request `f.req` inner array:
 [null, null, [Content], null, null, projectId, boardId, [null,null,null,null,<shortcut>]]
 ```
 
-- `Content` = `[[part, part, ...], "user", …, 2]`. Parts: a text part `["<message>"]`, and one part per selected block `[null×7, [1, null, "<blockId>"]]`.
+- `Content` = `[[part, part, ...], "user", …, 2]`. Parts: a text part `["<message>"]`, and one part per selected block `[null×7, [<kind>, "<name>", "<blockId>"]]`, where kind `1` = image and `2` = text, and name is the image's filename (`""` for text). Confirmed in the 2026-09-24 selection capture. The earlier learn-style capture showed `[1,null,id]`, so the name is optional.
 - `shortcut` (omitted on normal turns):
   - `3` = empty-board onboarding. The client sends it when the board is empty and there's no chat history. It pre-loads `board-starter-skill` + `clarification-skill`.
   - `1` = "learn style" (seen with the Create-style action).
@@ -117,6 +127,19 @@ Tool args/results use protobuf `Struct`/`Value` encoding as arrays: `Value = [nu
 The answer to a clarification form comes back as one plain user message, e.g. `"Character portraits and races, Town and architecture designs; Classic oil painting style, Concept art"`.
 
 Block references in chat text: `[[id:<blockId>|name:<block name>]]`. The UI renders them as chips.
+
+### 4.5 Image edit (`StreamGenerateContent`, no agent)
+
+Editing an image from the block UI does not use the agent. It calls `labs_canvas.CanvasService/StreamGenerateContent` directly (`rt=c`):
+
+```
+f.req=[null, "[null,null,[[[[\"<edit prompt>\"]],\"user\",null,null,null,[[null,[\"image/jpeg\",\"<base64>\"]],0,4]]],null,null,\"<projectId>\",\"<boardId>\"]"]
+```
+
+- Input: the prompt text plus the source image as inline base64 (JPEG here, about 165 KB; the block's original was PNG, so the client re-encodes). The trailing `0,4` follows the image part; `4` matches the block's aspect code (16:9), `0` is unknown.
+- Output: one chunk with `[[[[[[null,["image/png","<base64>"]]],"model"],"<32-hex id>"]],<number>]`, about 2.8 MB. The client then writes the result back as a block update. That write is not in the capture, so which RPC replaces the resource is unconfirmed (`nMLvne` with the `resources` mask is the likely one).
+- The sketch tool's model call is this same one, sent with the prompt typed in the sketch UI (the "our future" door edit). Cross-outs made in the sketch layer are **not** sent to the model by themselves; see Resource — image annotations below.
+- The block's index 5 (generation content) holds the latest edit prompt, e.g. `[[[[["Change the circular ancient hatch into a flush, square-shaped door integrated into the wall."]],"user"]]]`. A repeat edit replaces it rather than appending.
 
 ## 5. Data model
 
@@ -188,8 +211,20 @@ Aspect ratio → initial size → code:
 For a new AI image, index 8 is `null` and index 9 holds the prompt, until the caption arrives (section 6).
 
 ### Resource — text
+**Sketch annotations** (captured 2026-09-24 01:21:55): drawing on an image and saving writes the block with `nMLvne` mask `[["resources"]]` and a resource carrying three extra fields:
 
-`[projectId, boardId, blockId, resourceId, content, null, "text/plain"]`. `content` is a ProseMirror/TipTap doc, either bare `{"type":"doc",…}` or wrapped `{"richText":{…},"scale":1,"autoSize":false}`. Read both; write the wrapped form.
+| Index | Field |
+|---|---|
+| 13 | Base64 JPEG of the image **with the strokes flattened in** (about 275 KB). Upload only; the server does not echo it. |
+| 14 | Download URL of that flattened image (server sets it; `null` in the request). |
+| 15 | The strokes as a JSON string: an array of tldraw shape records (`{"x","y","rotation","isLocked","opacity","meta","id":"shape:…","type":"line","props":{"dash":"draw","size":"m","color":"red","spline":"line","points":{…}},"parentId":"page:page","index":"…","typeName":"shape"}`). Two red lines here for a cross-out. |
+
+Index 7 (original URL) and captions 8–9 are unchanged, so the original image survives and the annotation is a separate layer. The block's rect in the request was `[0,0,0,0]` and ignored (mask is `resources` only). For the clone this maps to a tldraw drawing layer stored with the image plus a flattened export.
+
+
+`[projectId, boardId, blockId, resourceId, content, null, "text/plain"]`. `content` is a ProseMirror/TipTap doc, either bare `{"type":"doc",…}` or wrapped `{"richText":{…},"scale":1,"autoSize":false}`. Read both. The client itself wrote a bare doc with `attrs` (`{"type":"doc","attrs":{"dir":"auto"},"content":[{"type":"paragraph","attrs":{"dir":"auto","textAlign":null},…}]}`) for a new text block, and the wrapped form after an agent `update_text_block`. Our clone writes the wrapped form.
+
+The agent's `update_text_block` stores plain text in the resource (mime `text/plain`, a new lowercase resource id, same block id); the client then rewrites it as `richText`.
 
 ### Style artifact (`AkhG3d`)
 
