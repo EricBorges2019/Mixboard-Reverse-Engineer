@@ -130,6 +130,7 @@ positional arrays.
   shows questions with 4 suggestion chips each, multi-select.
 - **Inspector:** caption title and description editor for a selected image (D1).
 - **Style bank:** saved styles with previews and a Create style action.
+- **Style presets:** the 73 recovered presets (`prompts/style-presets.md`, SPEC §7.10) in a picker. The server loads them from a JSON copy generated from that file. Picking one fills `{prompt}` in the positive template and passes it as the `style` argument; the negative text is sent as "Avoid: ...". The presentation export is out of scope, so presets only affect image generation. Unlike the original (where use is unconfirmed), this is our own design.
 - **Settings:** Puns switch (default off), model IDs. The OpenRouter key lives in the server's
   `.env` and is never sent to the browser.
 - **Board list:** projects with thumbnails.

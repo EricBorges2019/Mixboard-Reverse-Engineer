@@ -61,7 +61,7 @@ The payload is double-encoded (a JSON array inside a JSON string).
 | `nMLvne` | Batch update blocks, with a **field mask** per block | `[[[Block, [[mask...]]], ...]]` | Blocks |
 | `BfHe` | Delete blocks | `[[[projectId, boardId, blockId], ...]]` | `[]` |
 | `AkhG3d` | List style artifacts | `[projectId, boardId, 3]` | `[null, hasAny, [StyleArtifact...]]` |
-| `fFgggb` | Called once on board open; returned `[]` on a new board. Likely chat history. | `[boardId, projectId]` | `[]` |
+| `fFgggb` | Called once on board open; returns the board's saved chat history (confirmed): `[[[["<user text>"]],"user"], [[["<model reply>"]],…]…]`, Gemini-style Contents alternating user and model. `[]` on a new board. | `[boardId, projectId]` | `[]` |
 | `b0uUp` | Get artifact content (cartridge Markdown) | `[projectId, boardId, artifactId]` | `[null, "<markdown>"]` |
 | `l1p1gd` | Get artifact bytes (PDF) | `[projectId, boardId, artifactId, 2]` | `[null, "<base64>"]` |
 | `vZrjA` | Start presentation generation | `[projectId, boardId, presentationId(client UPPER UUID), prompt, 1, [styleName]]` | `[presentationId, projectId, 1, null, "", 1]`; runs async |
