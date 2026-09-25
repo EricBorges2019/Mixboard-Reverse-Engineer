@@ -96,6 +96,8 @@ JS also names `CanvasService.DeleteArtifact`, `DownloadArtifact`, `GetCartridgeA
 
 4. `nMLvne` with mask `[position, z_index, resources]` attaches it and places the block.
 
+**Add menu** (user screenshot, 2026-09-24): the left tool rail is select, hand, text and **+**. The + opens a menu with **Upload from computer**, **Camera**, **Import from Drive** and **Import from Photos**. Each presumably ends in the upload flow above; the Camera, Drive and Photos pickers were not captured. The clone has drag-and-drop and paste only (no + button).
+
 Download URLs:
 
 ```
