@@ -36,6 +36,8 @@ pnpm test
 pnpm e2e        # Playwright against a fake OpenRouter; needs `pnpm exec playwright install chromium` once
 ```
 
+GitHub Actions (`.github/workflows/ci.yml`) runs all four on every pull request and on pushes to `main`.
+
 ## Versions
 
 The current version is in the root `package.json`, and the history is in `CHANGELOG.md`. When a change lands that a user would notice, add a line under `## [Unreleased]` in the changelog. To cut a release:
