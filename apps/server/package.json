@@ -1,0 +1,25 @@
+{
+  "name": "@mixboard/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p . --noEmit",
+    "check-models": "tsx scripts/check-models.ts",
+    "e2e-server": "tsx scripts/e2e-server.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "@mixboard/shared": "workspace:*",
+    "hono": "^4.6.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}
