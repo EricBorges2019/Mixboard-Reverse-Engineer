@@ -94,6 +94,62 @@ export function fitRect(size: { width: number; height: number }, maxWidth: numbe
 }
 
 /**
+ * Whether two rects intersect, inflated by `margin` on all sides.
+ * Precondition: none.
+ * Postcondition: returns true iff the margin-inflated rects share any area.
+ */
+export function rectsOverlap(a: Rect, b: Rect, margin = 0): boolean {
+  return a.x < b.x + b.w + margin && a.x + a.w + margin > b.x && a.y < b.y + b.h + margin && a.y + a.h + margin > b.y;
+}
+
+/**
+ * Arranges a set of image sizes into a compact grid, each in its own gap-separated cell sized to the largest image
+ * (so no two images in the bundle ever overlap each other).
+ * Precondition: `sizes` is non-empty.
+ * Postcondition: returns the grid's total bounding size and each image's offset from the grid's top-left corner.
+ */
+export function packBundle(sizes: { w: number; h: number }[], gap: number): { w: number; h: number; offsets: { x: number; y: number }[] } {
+  const cols = Math.max(1, Math.ceil(Math.sqrt(sizes.length)));
+  const rows = Math.ceil(sizes.length / cols);
+  const cellW = Math.max(...sizes.map((s) => s.w));
+  const cellH = Math.max(...sizes.map((s) => s.h));
+  const offsets = sizes.map((_, i) => ({ x: (i % cols) * (cellW + gap), y: Math.floor(i / cols) * (cellH + gap) }));
+  return { w: cols * cellW + (cols - 1) * gap, h: rows * cellH + (rows - 1) * gap, offsets };
+}
+
+/**
+ * Finds a spot for a `size`-shaped cluster near `dropPoint` that clears every rect in `existing` by `gap`, searching
+ * outward in a ring pattern (the drop point itself, then wider and wider circles around it) so a bundle spreads out
+ * around where the user dropped it instead of landing on top of other images.
+ * Precondition: none.
+ * Postcondition: returns the cluster's top-left corner. If no clear spot is found within `maxRings` rings, returns the
+ * position centered on `dropPoint` (may overlap) as a best-effort fallback.
+ */
+export function findClusterOrigin(
+  size: { w: number; h: number },
+  dropPoint: { x: number; y: number },
+  existing: Rect[],
+  gap: number,
+  step = 80,
+  maxRings = 24,
+): { x: number; y: number } {
+  const candidates: { x: number; y: number }[] = [{ x: dropPoint.x, y: dropPoint.y }];
+  for (let ring = 1; ring <= maxRings; ring++) {
+    const radius = ring * step;
+    const samples = ring * 8;
+    for (let i = 0; i < samples; i++) {
+      const angle = (i / samples) * Math.PI * 2;
+      candidates.push({ x: dropPoint.x + radius * Math.cos(angle), y: dropPoint.y + radius * Math.sin(angle) });
+    }
+  }
+  for (const { x: cx, y: cy } of candidates) {
+    const rect = { x: cx - size.w / 2, y: cy - size.h / 2, w: size.w, h: size.h };
+    if (existing.every((e) => !rectsOverlap(rect, e, gap))) return { x: rect.x, y: rect.y };
+  }
+  return { x: dropPoint.x - size.w / 2, y: dropPoint.y - size.h / 2 };
+}
+
+/**
  * Inserts or replaces a block in a list.
  * Precondition: none.
  * Postcondition: returns a new list where the block with the same id is replaced in place, or appended when new.

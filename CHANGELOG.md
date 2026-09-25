@@ -6,6 +6,9 @@ Add a line under **Unreleased** whenever a change lands that a user of the app w
 
 ## [Unreleased]
 
+### Changed
+- Dropping or pasting a bundle of image files now spreads them as a grid around the drop point, searching outward for a spot clear of existing images instead of just cascading diagonally on top of them.
+
 ## [0.3.1] - 2026-09-24
 
 ### Added

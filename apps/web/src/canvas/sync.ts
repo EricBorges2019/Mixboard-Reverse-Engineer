@@ -2,7 +2,10 @@ import type { Editor } from 'tldraw';
 import type { Block, BlockPatch, Board, Viewport } from '@mixboard/shared';
 import * as api from '../api/client';
 import { createBatcher } from './batcher';
-import { blockToShapeInput, fitRect, shapeIdFor, textShapeToContent, type ShapeInput } from './mapping';
+import { blockToShapeInput, findClusterOrigin, fitRect, packBundle, shapeIdFor, textShapeToContent, type ShapeInput } from './mapping';
+
+/** Gap kept between dropped images, and between the bundle and whatever is already on the board. */
+const DROP_GAP = 24;
 
 /** The parts of a tldraw record this module reads. */
 interface RecordLike { typeName: string; id: string; type?: string; x?: number; y?: number; index?: string; props?: any; meta?: Record<string, unknown>; z?: number }
@@ -248,18 +251,33 @@ export function attachBoardSync(editor: Editor, board: Board, options: SyncOptio
   }
 
   /**
-   * Turns dropped or pasted image files into image blocks.
+   * Turns dropped or pasted image files into image blocks, spread as a grid around the drop point so the bundle
+   * clears whatever is already on the board instead of landing on top of it.
    * Precondition: `files` may contain non-images (ignored).
-   * Postcondition: for each image a placeholder shape appears, the file uploads, and the finished block replaces the placeholder. A failed upload removes the placeholder and its block and is reported.
+   * Postcondition: for each decodable image a placeholder shape appears at its spot in the grid, the file uploads, and the finished block replaces the placeholder. A file that fails to decode or upload is skipped/removed and reported; the rest of the bundle still places.
    */
   async function handleDroppedFiles(files: File[], point?: { x: number; y: number }): Promise<void> {
     const origin = point ?? editor.getViewportPageBounds().center;
-    let offset = 0;
-    for (const file of files) {
-      if (!file.type.startsWith('image/')) continue;
+    const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+    const sized: { file: File; w: number; h: number }[] = [];
+    for (const file of imageFiles) {
+      try {
+        sized.push({ file, ...fitRect(await naturalSize(file), 640, { x: 0, y: 0 }) });
+      } catch (err) {
+        report(err);
+      }
+    }
+    if (!sized.length) return;
+    const existing = editor.getCurrentPageShapesSorted()
+      .map((s) => editor.getShapePageBounds(s.id))
+      .filter((b): b is NonNullable<typeof b> => !!b)
+      .map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
+    const grid = packBundle(sized, DROP_GAP);
+    const gridOrigin = findClusterOrigin(grid, origin, existing, DROP_GAP);
+    for (const [i, { file, w, h }] of sized.entries()) {
+      const rect = { x: gridOrigin.x + grid.offsets[i].x, y: gridOrigin.y + grid.offsets[i].y, w, h };
       let block: Block | null = null;
       try {
-        const rect = fitRect(await naturalSize(file), 640, { x: origin.x + offset, y: origin.y + offset });
         block = await api.createBlock(board.id, { type: 'image', name: file.name, rect, status: 'generating' });
         upsertBlock(editor, block);
         options.onBlockUpserted?.(block);
@@ -274,7 +292,6 @@ export function attachBoardSync(editor: Editor, board: Board, options: SyncOptio
         }
         report(err);
       }
-      offset += 30;
     }
   }
   editor.registerExternalContentHandler('files', (content) => handleDroppedFiles(content.files, content.point));
