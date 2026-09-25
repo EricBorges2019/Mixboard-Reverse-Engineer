@@ -6,6 +6,8 @@ Add a line under **Unreleased** whenever a change lands that a user of the app w
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-24
+
 ### Added
 - Floating toolbar above a selected image with **Regenerate** and **More like this**, run by the server as in Mixboard (SPEC §4.6). Regenerate makes one loose reinterpretation next to the source; More like this makes three close variants in a row below it.
 - Setting to crop Regenerate's square image to the source's shape (on by default, D4).
