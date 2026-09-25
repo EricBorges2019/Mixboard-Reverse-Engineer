@@ -541,6 +541,8 @@ The first generation started with `> ` blockquote markers in the header and the 
 
 The project thumbnail (`dmKd` index 8, an 800×741 overview of the whole board, not the viewport) is a save artifact for the project list. Three viewport questions without a selection failed, and with two nearly off-screen images selected the agent still said they were "at the center of your viewport". The client sends only the selected block refs (`[kind, name, id]`), so the clone must not promise viewport awareness; pass selection and, if wanted, block rects.
 
+**Project list "Generating…" badge** (user screenshot, 2026-09-25; not in a capture yet): a board card in the project list shows an orange pill badge, top-right of the thumbnail, reading "Generating…" while that board has an in-progress presentation generation (§8.1). The badge sits above the thumbnail image; the card's title and date are unaffected. Unknown: the RPC/field that carries this state (plausibly polled or pushed alongside `QY7lkf`'s project-list response), whether it also covers in-progress cartridge/PDF generation, and what the card shows on completion or failure (per §9, presentation generation was never observed to finish).
+
 ## 9. Open gaps
 
 Closed by the 2026-09-24 recapture: the image-edit call (§4.5), `update_text_block` and `delete_block` (§7.9), export flows for cartridge and PDF (§8.1), and the `remove_background` trigger (§7.8). Still open:
