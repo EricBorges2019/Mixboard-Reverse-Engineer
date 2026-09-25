@@ -36,6 +36,16 @@ pnpm test
 pnpm e2e        # Playwright against a fake OpenRouter; needs `pnpm exec playwright install chromium` once
 ```
 
+## Versions
+
+The current version is in the root `package.json`, and the history is in `CHANGELOG.md`. When a change lands that a user would notice, add a line under `## [Unreleased]` in the changelog. To cut a release:
+
+```bash
+pnpm release minor   # or patch (fixes only) / major
+```
+
+The command refuses unless tracked files have no uncommitted changes and Unreleased has at least one entry. It then bumps the version, turns Unreleased into a dated section, commits only `package.json` and `CHANGELOG.md` as `Release X.Y.Z`, and adds the annotated tag `vX.Y.Z`. It never pushes; run `git push && git push origin vX.Y.Z` when you're ready.
+
 ## Conventions
 
 Every function has a comment above it with a description, a `Precondition:` and a `Postcondition:` (enforced by lint).

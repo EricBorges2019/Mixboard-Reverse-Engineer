@@ -60,7 +60,9 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Project state
 
-The clone is being implemented per `docs/superpowers/plans/2026-09-23-mixboard-clone.md` (design: `docs/superpowers/specs/2026-09-23-mixboard-clone-design.md`). Commands: `pnpm dev`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm e2e`. Every function needs a description, `Precondition:` and `Postcondition:` comment (lint-enforced). `SPEC.md` remains the source of truth for the original's behavior.
+The clone is being implemented per `docs/superpowers/plans/2026-09-23-mixboard-clone.md` (design: `docs/superpowers/specs/2026-09-23-mixboard-clone-design.md`). Commands: `pnpm dev`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm e2e`, `pnpm release`. Every function needs a description, `Precondition:` and `Postcondition:` comment (lint-enforced). `SPEC.md` remains the source of truth for the original's behavior.
+
+**Versioning:** the version lives in the root `package.json` and the history in `CHANGELOG.md`. Whenever a change a user would notice is finished, add a line to `## [Unreleased]` in `CHANGELOG.md` in the same change. Only run `pnpm release` when asked: it commits and tags.
 
 ## What this project is
 
