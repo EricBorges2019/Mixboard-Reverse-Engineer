@@ -20,6 +20,7 @@ Google Mixboard (an AI concepting canvas) shuts down on 2026-09-28. Goal: revers
 |---|----------|
 | D1 | Users can edit the AI-generated image descriptions (title + long description). |
 | D2 | Mixboard's per-request punny loading taglines are kept, behind a toggle. |
+| D3 | Image captions describe known characters and IP by appearance and don't name them (the user can add names). Naming risks confident false positives, and leaving names out is arguably not a loss. The clone's caption prompt adds one line for this (section 6). |
 
 ## 3. Architecture (confirmed from traffic)
 
@@ -239,7 +240,7 @@ The preview PNG is about 81–83 KB as base64 in the listing (the earlier ~1.9 M
 - Every image gets a caption, **including AI-generated ones**: a short title (resource index 8) and a 3–6 paragraph description (index 9).
 - The caption is made **server-side and asynchronously**. The client first sees it in a later RPC response (`nMLvne` / `AfaG2d` / `dmKd`), not in the agent stream.
 - The caption title is separate from the block name (block "Dragonfolk Elder Portrait" → caption "Dragon Scholar Mage").
-- **Captioning prompt (recovered verbatim, `prompts/caption-prompt.md`)**:
+- **Captioning prompt (recovered verbatim below; the clone's `prompts/caption-prompt.md` adds one line after the people rule, per D3)**:
   ```
   Describe this image in enough detail that someone could recreate it.
   Note the position and orientation of every object (use the viewer's left/right).
