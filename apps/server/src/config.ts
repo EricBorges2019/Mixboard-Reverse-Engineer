@@ -27,6 +27,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     baseUrl: env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
     defaults: {
       puns: false,
+      cropRegenerated: true,
+      showLineage: false,
+      lineageFade: true,
       models: {
         agent,
         caption: env.CAPTION_MODEL ?? agent,

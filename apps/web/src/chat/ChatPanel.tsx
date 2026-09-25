@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { blockRef } from '@mixboard/shared';
+import { useState } from 'react';
 import { ClarificationForm } from './ClarificationForm';
 import { Markdown } from './Markdown';
 import { lastUserText } from './reducer';
@@ -8,7 +7,7 @@ import type { useChat } from './useChat';
 /**
  * The chat side panel.
  * Precondition: `chat` comes from useChat for the current board; `blockCount` is the number of blocks on the board.
- * Postcondition: shows history, streamed status, replies with chips, and clarification forms; after an error (and while idle) a Retry button re-sends the last user message; Enter sends (Shift+Enter adds a line). On an empty board the agent has not answered yet, messages (including Retry) use the onboarding shortcut. A `mb:regenerate` window event from an errored image block sends a regenerate request for that block.
+ * Postcondition: shows history, streamed status, replies with chips, and clarification forms; after an error (and while idle) a Retry button re-sends the last user message; Enter sends (Shift+Enter adds a line). On an empty board the agent has not answered yet, messages (including Retry) use the onboarding shortcut.
  */
 export function ChatPanel({ chat, blockCount, onFocusBlock }: { chat: ReturnType<typeof useChat>; blockCount: number; onFocusBlock(blockId: string): void }) {
   const { state, send } = chat;
@@ -27,20 +26,6 @@ export function ChatPanel({ chat, blockCount, onFocusBlock }: { chat: ReturnType
     void send(draft, isEmptyBoard ? 3 : undefined);
     setDraft('');
   }
-
-  useEffect(() => {
-    /**
-     * Handles the Regenerate button of a failed image block.
-     * Precondition: `e` is a CustomEvent with `{blockId, name}` detail.
-     * Postcondition: a regenerate request naming the block is sent.
-     */
-    function onRegenerate(e: Event): void {
-      const { blockId, name } = (e as CustomEvent<{ blockId: string; name: string }>).detail;
-      void send(`Regenerate ${blockRef(blockId, name || 'this image')}`);
-    }
-    window.addEventListener('mb:regenerate', onRegenerate);
-    return () => window.removeEventListener('mb:regenerate', onRegenerate);
-  }, [send]);
 
   return (
     <div className="chat">

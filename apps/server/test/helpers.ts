@@ -10,6 +10,9 @@ import { Repo } from '../src/repo';
 
 export const defaultSettings: Settings = {
   puns: false,
+  cropRegenerated: true,
+  showLineage: false,
+  lineageFade: true,
   models: { agent: 'test/agent', caption: 'test/caption', tagline: 'test/tagline', image: 'test/image' },
 };
 

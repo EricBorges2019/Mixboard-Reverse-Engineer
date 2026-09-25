@@ -31,6 +31,15 @@ export type Resource = z.infer<typeof Resource>;
 export const BlockStatus = z.enum(['generating', 'ready', 'error']);
 export type BlockStatus = z.infer<typeof BlockStatus>;
 
+/**
+ * Where an image block came from (D5, a clone addition): the action that made it and the blocks it was made from.
+ * `edit` covers the agent's update_image_block; `reference` covers create_image_block with source images.
+ */
+export const OriginAction = z.enum(['regenerate', 'more-like-this', 'edit', 'reference', 'remove-background']);
+export type OriginAction = z.infer<typeof OriginAction>;
+export const Origin = z.object({ action: OriginAction, sourceBlockIds: z.array(z.string()).min(1) });
+export type Origin = z.infer<typeof Origin>;
+
 export const Block = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -42,6 +51,8 @@ export const Block = z.object({
   prompt: z.string().nullable(),
   aspectRatio: AspectRatio.nullable(),
   status: BlockStatus,
+  /** Null for uploads, text blocks and images generated from a prompt alone. */
+  origin: Origin.nullable(),
   resources: z.array(Resource),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -55,6 +66,7 @@ export const NewBlock = z.object({
   prompt: z.string().nullable().default(null),
   aspectRatio: AspectRatio.nullable().default(null),
   status: BlockStatus.default('ready'),
+  origin: Origin.nullable().default(null),
   zIndex: z.number().int().optional(),
 });
 export type NewBlockInput = z.input<typeof NewBlock>;
@@ -98,8 +110,12 @@ export type StyleArtifact = z.infer<typeof StyleArtifact>;
 export const Models = z.object({ agent: z.string(), caption: z.string(), tagline: z.string(), image: z.string() });
 export type Models = z.infer<typeof Models>;
 
-export const Settings = z.object({ puns: z.boolean(), models: Models });
+/** The on/off settings: taglines (D2), cropping Regenerate's square image to the source's shape (D4), and lineage arrows (D5). */
+export const SETTING_FLAGS = ['puns', 'cropRegenerated', 'showLineage', 'lineageFade'] as const;
+export type SettingFlag = (typeof SETTING_FLAGS)[number];
+
+export const Settings = z.object({ puns: z.boolean(), cropRegenerated: z.boolean(), showLineage: z.boolean(), lineageFade: z.boolean(), models: Models });
 export type Settings = z.infer<typeof Settings>;
 
-export const SettingsPatch = z.object({ puns: z.boolean().optional(), models: Models.partial().optional() });
+export const SettingsPatch = Settings.omit({ models: true }).partial().extend({ models: Models.partial().optional() });
 export type SettingsPatch = z.infer<typeof SettingsPatch>;

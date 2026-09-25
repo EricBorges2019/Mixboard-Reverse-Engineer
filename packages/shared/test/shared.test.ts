@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import {
   AgentEvent, AgentRunRequest, ASPECT_SIZES, NewBlock, blockRef, docToPlainText,
-  nearestRatio, plainTextToDoc, splitBlockRefs, unwrapTextContent, wrapTextContent,
+  nearestRatio, nearestRatioForSize, plainTextToDoc, splitBlockRefs, unwrapTextContent, wrapTextContent,
 } from '../src/index';
 
 describe('aspect', () => {
@@ -12,6 +12,11 @@ describe('aspect', () => {
   it('falls back to the numerically closest ratio', () => {
     expect(nearestRatio('4:3', ['1:1', '16:9'])).toBe('1:1');
     expect(nearestRatio('3:4', ['1:1', '9:16'])).toBe('1:1');
+  });
+  it('picks the supported ratio closest to a pixel size', () => {
+    expect(nearestRatioForSize(367, 500, ['1:1', '4:3', '3:4', '16:9', '9:16'])).toBe('3:4');
+    expect(nearestRatioForSize(1920, 1080, ['1:1', '4:3', '3:4', '16:9', '9:16'])).toBe('16:9');
+    expect(nearestRatioForSize(367, 500, ['1:1', '16:9'])).toBe('1:1');
   });
   it('has a size for every ratio', () => {
     expect(ASPECT_SIZES['4:3']).toEqual({ w: 450, h: 300 });

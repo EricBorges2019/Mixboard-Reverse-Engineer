@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ASPECT_SIZES, AspectRatio, nearestRatio, type Block } from '@mixboard/shared';
+import { ASPECT_SIZES, AspectRatio, nearestRatio, type Block, type Origin, type OriginAction } from '@mixboard/shared';
 import { defineTool, type ToolDef } from '../skills/registry';
 import type { ToolContext } from '../types';
 import { getBoardBlock } from './shared';
@@ -26,15 +26,35 @@ function shortName(prompt: string): string {
 }
 
 /**
- * Turns source blocks into data-URL reference images.
+ * Picks the source blocks that count as images for this board: they become reference images and the new block's origin.
  * Precondition: `ids` refer to existing blocks.
- * Postcondition: returns one data URL per image block on this board that has a stored file; text blocks, other boards' blocks and blocks without files are skipped. Throws NotFoundError for unknown ids.
+ * Postcondition: returns the ids of image blocks on this board, in order and without repeats; text blocks and other boards' blocks are dropped. Throws NotFoundError for unknown ids.
+ */
+function imageSourceIds(ctx: ToolContext, ids: string[]): string[] {
+  return [...new Set(ids)].filter((id) => {
+    const block = ctx.repo.getBlock(id);
+    return block.boardId === ctx.boardId && block.type === 'image';
+  });
+}
+
+/**
+ * Builds a block origin from its source ids.
+ * Precondition: `sourceIds` came from imageSourceIds.
+ * Postcondition: returns `{action, sourceBlockIds}`, or null when there are no sources (an image from a prompt alone).
+ */
+function originFor(action: OriginAction, sourceIds: string[]): Origin | null {
+  return sourceIds.length ? { action, sourceBlockIds: sourceIds } : null;
+}
+
+/**
+ * Turns source image blocks into data-URL reference images.
+ * Precondition: `ids` came from imageSourceIds.
+ * Postcondition: returns one data URL per block that has a stored file; blocks without files are skipped.
  */
 function referenceImages(ctx: ToolContext, ids: string[]): string[] {
   const urls: string[] = [];
   for (const id of ids) {
     const block = ctx.repo.getBlock(id);
-    if (block.boardId !== ctx.boardId || block.type !== 'image') continue;
     const resource = block.resources.find((r) => r.kind === 'image');
     const file = resource && ctx.repo.readResourceBytes(resource.id);
     if (file) urls.push(`data:${file.mimeType};base64,${file.bytes.toString('base64')}`);
@@ -44,78 +64,64 @@ function referenceImages(ctx: ToolContext, ids: string[]): string[] {
 
 /**
  * Creates a `generating` block and announces it as a placeholder.
- * Precondition: `ctx.boardId` exists.
- * Postcondition: the block exists with status `generating` and a placeholder `block` event was emitted; returns the block.
+ * Precondition: `ctx.boardId` exists; `input.origin` lists the image sources (see originFor).
+ * Postcondition: the block exists with status `generating` and its origin, and a placeholder `block` event was emitted; returns the block.
  */
-function startPlaceholder(ctx: ToolContext, input: { name: string; rect: Block['rect']; prompt: string; aspectRatio: AspectRatio }): Block {
+function startPlaceholder(ctx: ToolContext, input: { name: string; rect: Block['rect']; prompt: string; aspectRatio: AspectRatio; origin: Origin | null }): Block {
   const block = ctx.repo.createBlock(ctx.boardId, { type: 'image', status: 'generating', ...input });
   ctx.emit({ type: 'block', block, isPlaceholder: true });
   return block;
 }
 
 /**
- * Generates an image and stores it in `block`.
- * Precondition: `block` exists and is `generating`.
- * Postcondition: on success the block holds the new image (replacing the old one when `replace`), is `ready`, a final `block` event was emitted, captioning was requested, and `{block_id, name}` is returned. On failure the block is `error` (or `ready` when it still has its previous image), a final `block` event was emitted and `{error}` is returned. An abort is rethrown.
+ * Generates an image and stores it in `block`, from what the block records: its prompt (style included), its
+ * aspect ratio and its origin sources as reference images. Try again replays the same recipe (imageActions/retry).
+ * Precondition: `block` exists, is `generating`, and has a prompt and an aspect ratio (startPlaceholder sets both).
+ * Postcondition: on success the block holds the new image, is `ready`, a final `block` event was emitted, captioning was requested, and `{block_id, name}` is returned. On failure the block is `error`, a final `block` event was emitted and `{error}` is returned. An abort is rethrown.
  */
-async function generateIntoBlock(
-  ctx: ToolContext,
-  block: Block,
-  opts: { prompt: string; style?: string; ratio: AspectRatio; sourceIds: string[]; replace: boolean },
-): Promise<{ block_id: string; name: string } | { error: string }> {
+async function generateIntoBlock(ctx: ToolContext, block: Block): Promise<{ block_id: string; name: string } | { error: string }> {
   try {
     const image = await ctx.llm.generateImage({
       model: ctx.models.image,
-      prompt: composePrompt(opts.prompt, opts.style),
-      aspectRatio: nearestRatio(opts.ratio, ctx.imageSupportedRatios),
-      referenceImages: referenceImages(ctx, opts.sourceIds),
+      prompt: block.prompt!,
+      aspectRatio: nearestRatio(block.aspectRatio!, ctx.imageSupportedRatios),
+      referenceImages: referenceImages(ctx, block.origin?.sourceBlockIds ?? []),
       signal: ctx.signal,
     });
-    if (opts.replace) ctx.repo.clearResources(block.id);
     const resource = ctx.repo.addResource({ blockId: block.id, kind: 'image', mimeType: image.mimeType, bytes: image.bytes });
     ctx.emit({ type: 'block', block: ctx.repo.setBlockStatus(block.id, 'ready'), isPlaceholder: false });
     ctx.onImageAdded(resource.id);
     return { block_id: block.id, name: block.name };
   } catch (err) {
-    const keepsImage = block.resources.some((r) => r.kind === 'image');
     if (ctx.signal.aborted) {
-      ctx.repo.setBlockStatus(block.id, keepsImage ? 'ready' : 'error');
+      ctx.repo.setBlockStatus(block.id, 'error');
       throw err;
     }
-    ctx.emit({ type: 'block', block: ctx.repo.setBlockStatus(block.id, keepsImage ? 'ready' : 'error'), isPlaceholder: false });
+    ctx.emit({ type: 'block', block: ctx.repo.setBlockStatus(block.id, 'error'), isPlaceholder: false });
     return { error: `Image generation failed: ${err instanceof Error ? err.message : String(err)}` };
   }
 }
 
 /**
- * Edits an existing image block, either into a new neighbouring block or in place.
+ * Edits an existing image block into a new neighbouring block. Mixboard never replaces an image (SPEC §7.3), so the source block is left untouched.
  * Precondition: `targetId` is an image block on this board.
- * Postcondition: see generateIntoBlock; the source image is always sent as the first reference. Throws when the target is missing, foreign or not an image.
+ * Postcondition: see generateIntoBlock; the new block sits 50 px right of the source, its origin is `action` from the source plus any extra image sources, and the source image is always sent as the first reference. Throws when the target is missing, foreign or not an image.
  */
 async function editImage(
   ctx: ToolContext,
-  a: { targetId: string; prompt: string; ratio?: AspectRatio; style?: string; extraSourceIds: string[]; createNew: boolean },
+  a: { action: OriginAction; targetId: string; prompt: string; ratio?: AspectRatio; style?: string; extraSourceIds: string[] },
 ): Promise<{ block_id: string; name: string } | { error: string }> {
   const target = getBoardBlock(ctx, a.targetId, 'image');
   const ratio = a.ratio ?? target.aspectRatio ?? '1:1';
   const size = a.ratio ? ASPECT_SIZES[a.ratio] : { w: target.rect.w, h: target.rect.h };
-  let block: Block;
-  if (a.createNew) {
-    block = startPlaceholder(ctx, {
-      name: `${target.name} (edit)`,
-      rect: { x: target.rect.x + target.rect.w + 50, y: target.rect.y, ...size },
-      prompt: a.prompt,
-      aspectRatio: ratio,
-    });
-  } else {
-    block = ctx.repo.setBlockStatus(target.id, 'generating');
-    ctx.emit({ type: 'block', block, isPlaceholder: true });
-  }
-  return generateIntoBlock(ctx, block, {
-    prompt: a.prompt, style: a.style, ratio,
-    sourceIds: [target.id, ...a.extraSourceIds.filter((id) => id !== target.id)],
-    replace: !a.createNew,
+  const block = startPlaceholder(ctx, {
+    name: `${target.name} (edit)`,
+    rect: { x: target.rect.x + target.rect.w + 50, y: target.rect.y, ...size },
+    prompt: composePrompt(a.prompt, a.style),
+    aspectRatio: ratio,
+    origin: originFor(a.action, imageSourceIds(ctx, [target.id, ...a.extraSourceIds])),
   });
+  return generateIntoBlock(ctx, block);
 }
 
 export const imageTools: ToolDef[] = [
@@ -142,19 +148,20 @@ export const imageTools: ToolDef[] = [
      */
     async run(a, ctx) {
       const base = ASPECT_SIZES[a.aspect_ratio];
+      const prompt = a.remove_background ? `${a.prompt}. Isolated subject on a plain transparent background.` : a.prompt;
       const block = startPlaceholder(ctx, {
         name: a.name || shortName(a.prompt),
         rect: { x: a.x, y: a.y, w: a.width ?? base.w, h: a.height ?? base.h },
-        prompt: a.prompt,
+        prompt: composePrompt(prompt, a.style),
         aspectRatio: a.aspect_ratio,
+        origin: originFor('reference', imageSourceIds(ctx, a.source_block_ids)),
       });
-      const prompt = a.remove_background ? `${a.prompt}. Isolated subject on a plain transparent background.` : a.prompt;
-      return generateIntoBlock(ctx, block, { prompt, style: a.style, ratio: a.aspect_ratio, sourceIds: a.source_block_ids, replace: false });
+      return generateIntoBlock(ctx, block);
     },
   }),
   defineTool({
     name: 'update_image_block',
-    description: 'Edit or regenerate an existing image block, by default into a new block next to it.',
+    description: 'Edit or regenerate an existing image block into a new block next to it.',
     schema: z.object({
       update_block_id: z.string(),
       prompt: z.string().min(1),
@@ -162,15 +169,16 @@ export const imageTools: ToolDef[] = [
       style: z.string().optional(),
       source_block_ids: z.array(z.string()).default([]),
       intent: Intent.default('create'),
+      // Accepted because the recovered skill file documents it, but ignored: Mixboard never replaces an image (SPEC §7.3).
       create_new_block_for_update: z.boolean().default(true),
     }),
     /**
-     * Edits an image block.
+     * Edits an image block into a new block.
      * Precondition: `update_block_id` is an image block on this board.
-     * Postcondition: see editImage.
+     * Postcondition: see editImage; `create_new_block_for_update: false` still creates a new block.
      */
     async run(a, ctx) {
-      return editImage(ctx, { targetId: a.update_block_id, prompt: a.prompt, ratio: a.aspect_ratio, style: a.style, extraSourceIds: a.source_block_ids, createNew: a.create_new_block_for_update });
+      return editImage(ctx, { action: 'edit', targetId: a.update_block_id, prompt: a.prompt, ratio: a.aspect_ratio, style: a.style, extraSourceIds: a.source_block_ids });
     },
   }),
   defineTool({
@@ -184,10 +192,10 @@ export const imageTools: ToolDef[] = [
      */
     async run({ source_block_id }, ctx) {
       return editImage(ctx, {
+        action: 'remove-background',
         targetId: source_block_id,
         prompt: 'Remove the background from this image. Keep the subject exactly as it is, on a plain transparent background.',
         extraSourceIds: [],
-        createNew: true,
       });
     },
   }),

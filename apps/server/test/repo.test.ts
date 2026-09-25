@@ -1,5 +1,9 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
+import { openDb } from '../src/db';
 import { NotFoundError, Repo } from '../src/repo';
 import { defaultSettings, makeRepo } from './helpers';
 
@@ -91,6 +95,49 @@ describe('Repo', () => {
     expect(s.puns).toBe(true);
     expect(s.models).toEqual({ ...defaultSettings.models, image: 'x/y' });
     expect(repo.getSettings()).toEqual(s);
+  });
+  it('crops regenerated images by default and remembers when that is switched off', () => {
+    const { repo } = makeRepo();
+    expect(repo.getSettings().cropRegenerated).toBe(true);
+    repo.updateSettings({ cropRegenerated: false });
+    repo.updateSettings({ puns: true });
+    expect(repo.getSettings()).toMatchObject({ cropRegenerated: false, puns: true });
+  });
+  it('hides lineage arrows and fades them by default, and remembers changes', () => {
+    const { repo } = makeRepo();
+    expect(repo.getSettings()).toMatchObject({ showLineage: false, lineageFade: true });
+    repo.updateSettings({ showLineage: true });
+    repo.updateSettings({ lineageFade: false });
+    expect(repo.getSettings()).toMatchObject({ showLineage: true, lineageFade: false, cropRegenerated: true });
+  });
+  it('stores where a block came from, and null for blocks made from nothing', () => {
+    const { repo } = makeRepo();
+    const board = repo.createBoard(repo.createProject().id);
+    const plain = repo.createBlock(board.id, { type: 'image', rect });
+    const derived = repo.createBlock(board.id, { type: 'image', rect, origin: { action: 'regenerate', sourceBlockIds: [plain.id] } });
+    expect(plain.origin).toBeNull();
+    expect(repo.getBlock(derived.id).origin).toEqual({ action: 'regenerate', sourceBlockIds: [plain.id] });
+  });
+  it('adds the origin column to a database created before lineage existed', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'mb-old-')), 'old.sqlite');
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+    const old = new DatabaseSync(path);
+    old.exec(`CREATE TABLE projects (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE boards (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL, viewport TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE blocks (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, board_id TEXT NOT NULL, type TEXT NOT NULL, name TEXT NOT NULL, rect TEXT NOT NULL, z_index INTEGER NOT NULL, prompt TEXT, aspect_ratio TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      INSERT INTO projects VALUES ('p', 'Old', 't', 't');
+      INSERT INTO boards VALUES ('bd', 'p', 'Board', '{"x":0,"y":0,"zoom":1}', 't', 't');
+      INSERT INTO blocks VALUES ('b', 'p', 'bd', 'image', 'Old image', '{"x":0,"y":0,"w":1,"h":1}', 1, NULL, NULL, 'ready', 't', 't');`);
+    old.close();
+    const repo = new Repo(openDb(path), join(tmpdir(), 'mb-old-files'), defaultSettings);
+    expect(repo.getBlock('b')).toMatchObject({ name: 'Old image', origin: null });
+    openDb(path); // Opening again must not try to add the column twice.
+  });
+  it('stores a block prompt', () => {
+    const { repo } = makeRepo();
+    const board = repo.createBoard(repo.createProject().id);
+    const block = repo.createBlock(board.id, { type: 'image', rect: { x: 0, y: 0, w: 10, h: 10 } });
+    expect(repo.setBlockPrompt(block.id, 'a mandrill portrait').prompt).toBe('a mandrill portrait');
   });
 });
 

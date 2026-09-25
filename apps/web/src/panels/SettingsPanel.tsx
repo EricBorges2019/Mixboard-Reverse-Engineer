@@ -9,9 +9,9 @@ const MODEL_FIELDS: { key: keyof Models; label: string }[] = [
 ];
 
 /**
- * Settings: the Puns switch (D2) and the four model ids.
+ * Settings: the Puns switch (D2), the crop switch for Regenerate (D4), the two lineage arrow switches (D5) and the four model ids.
  * Precondition: `settings` are loaded.
- * Postcondition: clicking the `Puns` switch calls `update({puns: !current})`; `Save models` calls `update({models})` with the edited ids. The OpenRouter key is not editable here: it lives in the server's `.env`.
+ * Postcondition: each switch calls `update` with its setting flipped (`puns`, `cropRegenerated`, `showLineage`, `lineageFade`); `Save models` calls `update({models})` with the edited ids. The OpenRouter key is not editable here: it lives in the server's `.env`.
  */
 export function SettingsPanel({ settings, update }: { settings: Settings; update(patch: SettingsPatch): Promise<void> }) {
   const [models, setModels] = useState<Models>(settings.models);
@@ -24,6 +24,26 @@ export function SettingsPanel({ settings, update }: { settings: Settings; update
         </button>
       </div>
       <p className="hint">Show a punny loading tagline while the agent works. Costs one extra small model call per message.</p>
+      <div className="row">
+        <span id="crop-label">Crop regenerated images</span>
+        <button role="switch" aria-checked={settings.cropRegenerated} aria-labelledby="crop-label" className="switch" onClick={() => void update({ cropRegenerated: !settings.cropRegenerated })}>
+          {settings.cropRegenerated ? 'On' : 'Off'}
+        </button>
+      </div>
+      <p className="hint">Regenerate makes a square image. On: crop it to the source image's shape, as Mixboard does. Off: show the whole square.</p>
+      <div className="row">
+        <span id="lineage-label">Show lineage at all times</span>
+        <button role="switch" aria-checked={settings.showLineage} aria-labelledby="lineage-label" className="switch" onClick={() => void update({ showLineage: !settings.showLineage })}>
+          {settings.showLineage ? 'On' : 'Off'}
+        </button>
+      </div>
+      <div className="row">
+        <span id="fade-label">Fade lineage arrows</span>
+        <button role="switch" aria-checked={settings.lineageFade} aria-labelledby="fade-label" className="switch" onClick={() => void update({ lineageFade: !settings.lineageFade })}>
+          {settings.lineageFade ? 'On' : 'Off'}
+        </button>
+      </div>
+      <p className="hint">Arrows run from each image to the images made from it. Off: hold L on the canvas to see them. Fade: ease them in and out instead of showing them instantly.</p>
       {MODEL_FIELDS.map(({ key, label }) => (
         <label key={key}>{label}<input value={models[key]} onChange={(e) => setModels({ ...models, [key]: e.target.value })} /></label>
       ))}

@@ -6,7 +6,7 @@ import type { Block, Board } from '@mixboard/shared';
 let nextId = 0;
 const block = (over: Partial<Block>): Block => ({
   id: `b${++nextId}`, projectId: 'p', boardId: 'bd', type: 'image', name: 'Img', rect: { x: 0, y: 0, w: 100, h: 100 }, zIndex: 1,
-  prompt: null, aspectRatio: null, status: 'ready', resources: [], createdAt: '', updatedAt: '', ...over,
+  prompt: null, aspectRatio: null, status: 'ready', origin: null, resources: [], createdAt: '', updatedAt: '', ...over,
 });
 
 vi.mock('../src/api/client', () => ({

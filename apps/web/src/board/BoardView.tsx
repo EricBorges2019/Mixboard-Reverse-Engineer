@@ -1,7 +1,11 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Editor } from 'tldraw';
 import type { AgentEvent, Block, Board, Project, Settings, SettingsPatch } from '@mixboard/shared';
 import { patchCaption } from '../api/client';
+import { runImageAction } from '../api/imageActions';
+import type { ImageAction, ImageActionTarget } from '../canvas/imageActions';
+import { lineageEdges, type LineageEdge } from '../canvas/lineage';
+import type { LineageOptions } from '../canvas/LineageArrows';
 import { BoardCanvas } from '../canvas/BoardCanvas';
 import { mergeBlock, shapeIdFor } from '../canvas/mapping';
 import { removeBlockShape, upsertBlock } from '../canvas/sync';
@@ -15,6 +19,7 @@ import { useSelectedBlockIds } from './useSelectedBlockIds';
 
 type Tab = 'chat' | 'inspector' | 'styles' | 'settings';
 const STYLE_TOOLS = new Set(['save_style', 'delete_style']);
+const ACTION_LABELS: Record<ImageAction, string> = { regenerate: 'Regenerate', 'more-like-this': 'More like this', retry: 'Try again' };
 
 /**
  * One board: canvas on the left, tabbed side panel on the right.
@@ -83,6 +88,34 @@ export function BoardView({ project, initialBoard, settings, updateSettings }: {
   useCaptionPolling(initialBoard.id, blocks, applyBlock);
 
   /**
+   * Runs an image action (the toolbar's Regenerate and More like this, or a failed image's Try again), independently of the chat.
+   * Precondition: `target` is an image block on this board (ready, or failed for Try again).
+   * Postcondition: streamed blocks are applied to state and canvas as they arrive; a failure (refused request, dropped connection or a failed generation) shows in the banner.
+   */
+  const onImageAction = useCallback((action: ImageAction, target: ImageActionTarget) => {
+    /**
+     * Reports a failed action in the banner.
+     * Precondition: none.
+     * Postcondition: the banner names the action and shows `message`.
+     */
+    const fail = (message: string) => setSaveError(`${ACTION_LABELS[action]} failed: ${message}`);
+    runImageAction(action, target.blockId, (e) => {
+      if (e.type === 'block') applyBlock(e.block);
+      else if (e.type === 'error') fail(e.message);
+    }).catch((err: unknown) => fail(err instanceof Error ? err.message : String(err)));
+  }, [applyBlock]);
+
+  /**
+   * Returns to the project list (the ☰ menu's "All projects").
+   * Precondition: none.
+   * Postcondition: navigates to `#/` (unmounting the board flushes pending canvas saves); while the agent is working the user is asked first, since leaving stops its reply. Image actions keep running on the server either way.
+   */
+  const leave = useCallback(() => {
+    if (chat.state.running && !window.confirm('The agent is still working. Leave and stop it?')) return;
+    window.location.hash = '#/';
+  }, [chat.state.running]);
+
+  /**
    * Selects a block and zooms to it (used by chat chips).
    * Precondition: none; unknown ids are ignored.
    * Postcondition: the block's shape is selected and in view.
@@ -104,6 +137,13 @@ export function BoardView({ project, initialBoard, settings, updateSettings }: {
     if (block) applyBlock({ ...block, resources: block.resources.map((r) => (r.id === resource.id ? resource : r)) });
   }
 
+  // Keyed by content so the arrows only re-render when lineage itself changes, not on every block update.
+  const edgesKey = JSON.stringify(lineageEdges(blocks));
+  const lineage = useMemo<LineageOptions>(
+    () => ({ edges: JSON.parse(edgesKey) as LineageEdge[], always: settings.showLineage, fade: settings.lineageFade }),
+    [edgesKey, settings.showLineage, settings.lineageFade],
+  );
+
   const selectedBlock = selectedIds.length === 1 ? blocks.find((b) => b.id === selectedIds[0]) ?? null : null;
   const selectedImages = selectedIds.filter((id) => blocks.find((b) => b.id === id)?.type === 'image');
 
@@ -118,6 +158,9 @@ export function BoardView({ project, initialBoard, settings, updateSettings }: {
         <BoardCanvas
           board={initialBoard}
           onReady={setEditor}
+          onLeave={leave}
+          onImageAction={onImageAction}
+          lineage={lineage}
           onSaveError={setSaveError}
           onBlockUpserted={onCanvasBlock}
           onBlockRemoved={onCanvasBlockRemoved}
@@ -131,7 +174,7 @@ export function BoardView({ project, initialBoard, settings, updateSettings }: {
         </nav>
         {/* The chat stays mounted so a running turn is not interrupted when switching tabs. */}
         <div hidden={tab !== 'chat'} className="tab-body"><ChatPanel chat={chat} blockCount={blocks.length} onFocusBlock={focusBlock} /></div>
-        {tab === 'inspector' && <div className="tab-body"><Inspector block={selectedBlock} onSave={saveCaption} /></div>}
+        {tab === 'inspector' && <div className="tab-body"><Inspector block={selectedBlock} blocks={blocks} onSave={saveCaption} onFocusBlock={focusBlock} /></div>}
         {tab === 'styles' && (
           <div className="tab-body">
             <StyleBank

@@ -4,7 +4,7 @@ import { blockIdFromShapeId, blockToShapeInput, captionKey, fitRect, mergeBlock,
 
 const base: Block = {
   id: 'b1', projectId: 'p', boardId: 'bd', type: 'image', name: 'Dragon', rect: { x: 10, y: 20, w: 300, h: 200 }, zIndex: 1,
-  prompt: null, aspectRatio: null, status: 'ready', resources: [], createdAt: '', updatedAt: '',
+  prompt: null, aspectRatio: null, status: 'ready', origin: null, resources: [], createdAt: '', updatedAt: '',
 };
 const imageResource = { id: 'r1', blockId: 'b1', kind: 'image' as const, mimeType: 'image/png', caption: null, content: null };
 
@@ -13,9 +13,16 @@ describe('blockToShapeInput', () => {
     const input = blockToShapeInput({ ...base, resources: [{ ...imageResource, caption: { title: 'Dragon Scholar', description: '', userEdited: false } }] });
     expect(input).toEqual({
       id: 'shape:b1', type: 'mb-image', x: 10, y: 20,
-      props: { w: 300, h: 200, src: '/api/files/r1', title: 'Dragon Scholar', status: 'ready' },
+      props: { w: 300, h: 200, src: '/api/files/r1', title: 'Dragon Scholar', status: 'ready', retryable: false },
       meta: { blockId: 'b1' },
     });
+  });
+  it('offers Try again only for failed images that have something to replay', () => {
+    const retryable = (over: Partial<Block>) => blockToShapeInput({ ...base, status: 'error', ...over }).props.retryable;
+    expect(retryable({ prompt: 'a dragon' })).toBe(true);
+    expect(retryable({ origin: { action: 'regenerate', sourceBlockIds: ['s'] } })).toBe(true);
+    expect(retryable({})).toBe(false);
+    expect(retryable({ prompt: 'a dragon', status: 'ready' })).toBe(false);
   });
   it('falls back to the block name and an empty src while generating', () => {
     const input = blockToShapeInput({ ...base, status: 'generating' });

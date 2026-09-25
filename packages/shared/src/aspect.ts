@@ -27,6 +27,23 @@ function logDistance(a: number, b: number): number {
  */
 export function nearestRatio(target: AspectRatio, supported: AspectRatio[]): AspectRatio {
   if (supported.includes(target)) return target;
-  const t = ratioValue(target);
-  return supported.reduce((best, r) => (logDistance(ratioValue(r), t) < logDistance(ratioValue(best), t) ? r : best));
+  return nearestToValue(ratioValue(target), supported);
+}
+
+/**
+ * Picks the supported ratio closest to a pixel size, e.g. a block's rect or an uploaded image.
+ * Precondition: `w` and `h` are positive; `supported` is non-empty.
+ * Postcondition: returns the member of `supported` closest to w/h; on a tie the earlier entry wins.
+ */
+export function nearestRatioForSize(w: number, h: number, supported: AspectRatio[]): AspectRatio {
+  return nearestToValue(w / h, supported);
+}
+
+/**
+ * Picks the supported ratio closest to a numeric width/height value.
+ * Precondition: `value` is positive; `supported` is non-empty.
+ * Postcondition: returns a member of `supported`; on a tie the earlier entry wins.
+ */
+function nearestToValue(value: number, supported: AspectRatio[]): AspectRatio {
+  return supported.reduce((best, r) => (logDistance(ratioValue(r), value) < logDistance(ratioValue(best), value) ? r : best));
 }

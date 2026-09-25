@@ -1,15 +1,26 @@
 import { useState } from 'react';
 import type { Block } from '@mixboard/shared';
+import { Lineage } from './Lineage';
 
 /**
- * Caption editor for the selected image (D1: users can edit the AI description).
- * Precondition: `block` is the single selected block, or null.
- * Postcondition: with an image block, shows editable title and description; `Save caption` calls `onSave(resourceId, {title, description})`. Otherwise shows a hint. The draft resets when the selected image or its caption changes.
+ * Caption editor and lineage for the selected image (D1: users can edit the AI description; D5: lineage).
+ * Precondition: `block` is the single selected block, or null; `blocks` are the board's current blocks.
+ * Postcondition: with an image block, shows editable title and description, then its lineage (chips call `onFocusBlock`); `Save caption` calls `onSave(resourceId, {title, description})`. Otherwise shows a hint. The draft resets when the selected image or its caption changes.
  */
-export function Inspector({ block, onSave }: { block: Block | null; onSave(resourceId: string, caption: { title: string; description: string }): Promise<void> }) {
+export function Inspector({ block, blocks, onSave, onFocusBlock }: {
+  block: Block | null;
+  blocks: Block[];
+  onSave(resourceId: string, caption: { title: string; description: string }): Promise<void>;
+  onFocusBlock(blockId: string): void;
+}) {
   const resource = block?.type === 'image' ? block.resources.find((r) => r.kind === 'image') : undefined;
   if (!block || !resource) return <p className="hint">Select an image to see and edit its caption.</p>;
-  return <CaptionEditor key={`${resource.id}:${resource.caption?.title}:${resource.caption?.description}`} block={block} resourceId={resource.id} caption={resource.caption} onSave={onSave} />;
+  return (
+    <>
+      <CaptionEditor key={`${resource.id}:${resource.caption?.title}:${resource.caption?.description}`} block={block} resourceId={resource.id} caption={resource.caption} onSave={onSave} />
+      <Lineage block={block} blocks={blocks} onFocusBlock={onFocusBlock} />
+    </>
+  );
 }
 
 /**

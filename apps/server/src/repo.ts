@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import {
-  Block, BlockPatch, NewBlock, type AspectRatio, type BlockStatus, type Board, type Caption, type NewBlockInput,
+  Block, BlockPatch, NewBlock, SETTING_FLAGS, type AspectRatio, type SettingFlag, type BlockStatus, type Board, type Caption, type NewBlockInput,
   type Project, type Resource, type Settings, type SettingsPatch, type StyleArtifact, type Viewport,
 } from '@mixboard/shared';
 
@@ -72,6 +72,7 @@ function toBlock(r: Row, resources: Resource[]): Block {
     prompt: r.prompt,
     aspectRatio: r.aspect_ratio as AspectRatio | null,
     status: r.status,
+    origin: r.origin ? JSON.parse(r.origin) : null,
     resources,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -232,8 +233,8 @@ export class Repo {
     const id = newId();
     const t = now();
     const z = b.zIndex ?? (this.one('SELECT COALESCE(MAX(z_index),0)+1 AS z FROM blocks WHERE board_id=?', boardId)!.z as number);
-    this.run('INSERT INTO blocks (id,project_id,board_id,type,name,rect,z_index,prompt,aspect_ratio,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-      id, board.projectId, boardId, b.type, b.name, JSON.stringify(b.rect), z, b.prompt, b.aspectRatio, b.status, t, t);
+    this.run('INSERT INTO blocks (id,project_id,board_id,type,name,rect,z_index,prompt,aspect_ratio,status,origin,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      id, board.projectId, boardId, b.type, b.name, JSON.stringify(b.rect), z, b.prompt, b.aspectRatio, b.status, b.origin && JSON.stringify(b.origin), t, t);
     return this.getBlock(id);
   }
 
@@ -258,6 +259,17 @@ export class Repo {
     const p = BlockPatch.parse(patch);
     this.run('UPDATE blocks SET name=?, rect=?, z_index=?, updated_at=? WHERE id=?',
       p.name ?? cur.name, JSON.stringify(p.rect ?? cur.rect), p.zIndex ?? cur.zIndex, now(), id);
+    return this.getBlock(id);
+  }
+
+  /**
+   * Sets the prompt a block's image was generated from.
+   * Precondition: the block exists.
+   * Postcondition: the prompt is stored and the updated block returned.
+   */
+  setBlockPrompt(id: string, prompt: string): Block {
+    this.getBlock(id);
+    this.run('UPDATE blocks SET prompt=?, updated_at=? WHERE id=?', prompt, now(), id);
     return this.getBlock(id);
   }
 
@@ -477,7 +489,8 @@ export class Repo {
   getSettings(): Settings {
     const r = this.one("SELECT value FROM settings WHERE key='settings'");
     const stored = r ? (JSON.parse(r.value) as Partial<Settings>) : {};
-    return { puns: stored.puns ?? this.defaults.puns, models: { ...this.defaults.models, ...stored.models } };
+    const flags = Object.fromEntries(SETTING_FLAGS.map((k) => [k, stored[k] ?? this.defaults[k]])) as Record<SettingFlag, boolean>;
+    return { ...flags, models: { ...this.defaults.models, ...stored.models } };
   }
 
   /**
@@ -488,7 +501,8 @@ export class Repo {
   updateSettings(patch: SettingsPatch): Settings {
     const r = this.one("SELECT value FROM settings WHERE key='settings'");
     const stored = r ? (JSON.parse(r.value) as SettingsPatch) : {};
-    const next: SettingsPatch = { ...stored, ...(patch.puns !== undefined && { puns: patch.puns }) };
+    const next: SettingsPatch = { ...stored };
+    for (const k of SETTING_FLAGS) if (patch[k] !== undefined) next[k] = patch[k];
     if (stored.models || patch.models) next.models = { ...stored.models, ...patch.models };
     this.run("INSERT INTO settings (key,value) VALUES ('settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", JSON.stringify(next));
     return this.getSettings();

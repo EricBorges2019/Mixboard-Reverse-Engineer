@@ -29,9 +29,27 @@ export function blockIdFromShapeId(shapeId: string): string {
 }
 
 /**
+ * The name an image is shown under, on the canvas and in the Inspector.
+ * Precondition: `block` is hydrated (resources included).
+ * Postcondition: returns the image caption's title, else the block name (possibly empty: Regenerate makes unnamed blocks).
+ */
+export function imageLabel(block: Block): string {
+  return block.resources.find((r) => r.kind === 'image')?.caption?.title || block.name;
+}
+
+/**
+ * Whether a failed image offers Try again: it needs something to replay (see the server's imageActions/retry).
+ * Precondition: none.
+ * Postcondition: true for a failed image block with a stored prompt, or one made by Regenerate (which can write its prompt again).
+ */
+export function isRetryable(block: Block): boolean {
+  return block.type === 'image' && block.status === 'error' && (!!block.prompt || block.origin?.action === 'regenerate');
+}
+
+/**
  * Converts a block into the input for a tldraw shape: images become `mb-image`, text becomes tldraw's native `text` shape.
  * Precondition: `block` is hydrated (resources included).
- * Postcondition: returns a shape input whose `meta.blockId` links it back to the block. Images show the caption title as their label (falling back to the block name) and an empty `src` until a file exists. Text blocks use the stored rich text (bare or wrapped form) or an empty document, plus the saved `scale` and `autoSize`; `w` is the page width divided by `scale`.
+ * Postcondition: returns a shape input whose `meta.blockId` links it back to the block. Images show imageLabel as their title and an empty `src` until a file exists. Text blocks use the stored rich text (bare or wrapped form) or an empty document, plus the saved `scale` and `autoSize`; `w` is the page width divided by `scale`.
  */
 export function blockToShapeInput(block: Block): ShapeInput {
   const common = { id: shapeIdFor(block.id), x: block.rect.x, y: block.rect.y, meta: { blockId: block.id } };
@@ -39,7 +57,7 @@ export function blockToShapeInput(block: Block): ShapeInput {
     const resource = block.resources.find((r) => r.kind === 'image');
     return {
       ...common, type: 'mb-image',
-      props: { w: block.rect.w, h: block.rect.h, src: resource ? fileUrl(resource.id) : '', title: resource?.caption?.title || block.name, status: block.status },
+      props: { w: block.rect.w, h: block.rect.h, src: resource ? fileUrl(resource.id) : '', title: imageLabel(block), status: block.status, retryable: isRetryable(block) },
     };
   }
   const content = block.resources.find((r) => r.kind === 'text')?.content as { scale?: unknown; autoSize?: unknown } | null | undefined;

@@ -21,6 +21,8 @@ Google Mixboard (an AI concepting canvas) shuts down on 2026-09-28. Goal: revers
 | D1 | Users can edit the AI-generated image descriptions (title + long description). |
 | D2 | Mixboard's per-request punny loading taglines are kept, behind a toggle. |
 | D3 | Image captions describe known characters and IP by appearance and don't name them (the user can add names). Naming risks confident false positives, and leaving names out is arguably not a loss. The clone's caption prompt adds one line for this (section 6). |
+| D4 | Regenerate's square output is cropped to the source's aspect ratio, as in Mixboard (§4.6), behind a setting that is on by default. With it off, the new block keeps the image's own shape, scaled so its longest side equals the source's longest side; the placeholder starts landscape and takes the real shape when the image arrives. |
+| D5 | The clone records which images each image was made from (block `origin`: the action and the source block ids) and shows it: "Based on" / "Used by" chips in the Inspector, and arrows from source to derivative drawn under the images, shown while L is held or always (setting), fading or instant (setting). Mixboard shows no lineage; its requests do carry the source block (§4.6). |
 
 ## 3. Architecture (confirmed from traffic)
 
@@ -30,6 +32,8 @@ Google Mixboard (an AI concepting canvas) shuts down on 2026-09-28. Goal: revers
 - **Files:** Google resumable-upload protocol for uploads; downloads from `mixboard.usercontent.google.com`.
 
 Hierarchy: **Project** → **Boards** → **Blocks** → **Resources**. Block types: `2` = text, `3` = image. Styles are stored as project-level **artifacts**.
+
+**Multiple boards per project** (user screenshot, 2026-09-24; not in a capture yet): clicking the project name at the top left ("← romantasy ⤢") opens a board list: **New board +**, then the boards by name ("Board 1" with a **MAIN** badge, "Board 2", the current one highlighted). The URL selects the board: `/projects/<projectId>?boardId=board-1790300332439`, so a new board's id is `board-<ms timestamp>`, unlike the 32-hex/UUID ids elsewhere. A new board is empty and shows "double-click anywhere to talk to Mixboard and start building your project". Unknown: which RPC creates a board, whether MAIN can move, how boards are renamed or deleted, and whether chat history and styles are per board (styles are per project, above).
 
 ## 4. Wire protocol
 
@@ -142,6 +146,37 @@ f.req=[null, "[null,null,[[[[\"<edit prompt>\"]],\"user\",null,null,null,[[null,
 - Output: one chunk with `[[[[[[null,["image/png","<base64>"]]],"model"],"<32-hex id>"]],<number>]`, about 2.8 MB. The client then writes the result back as a block update. That write is not in the capture, so which RPC replaces the resource is unconfirmed (`nMLvne` with the `resources` mask is the likely one).
 - The sketch tool's model call is this same one, sent with the prompt typed in the sketch UI (the "our future" door edit). Cross-outs made in the sketch layer are **not** sent to the model by themselves; see Resource — image annotations below.
 - The block's index 5 (generation content) holds the latest edit prompt, e.g. `[[[[["Change the circular ancient hatch into a flush, square-shaped door integrated into the wall."]],"user"]]]`. A repeat edit replaces it rather than appending.
+
+### 4.6 Regenerate and More like this (`StreamGenerateContent`, no agent)
+
+Captured 2026-09-24 (`regen_morelike.har`, `regen_regen.har`). Both image buttons call `StreamGenerateContent` directly; neither capture has a `RunAdkAgent` call. Unlike the edit in §4.5, the source image is sent by reference, not inline: a file part `[1, "<file name or empty>", "<blockId>"]` (the name was the upload's original file name, and empty for a generated source).
+
+**Regenerate** (4 calls: 3 on the uploaded Blaidd portrait, 1 on one of its regenerations):
+
+```
+[[[[[""], [null×7, [1, "<file>", "<srcBlockId>"]]], "user", null×9, [[null×4, [projectId, boardId, srcBlockId, srcResourceId]]]]], null, null, projectId, boardId]
+```
+
+- The prompt is always empty, also when the source is itself a regeneration. Every captured source had no stored prompt, so whether a prompted image sends its prompt is unknown (the source block ref would let the server look it up).
+- The response streams one new block before generation (name `""`, prompt empty) and then the same block with its resource. Nothing is inline; the client downloads the image. About 10–30 s.
+- New block: same size as the source, placed at source + (40, 40), so it overlaps the source (seen twice: (55,508) → (95,548)).
+- The image is always a **1024×1024 square**, and the canvas crops it to the block's (source's) aspect ratio. See D4.
+- Output: a loose reinterpretation. It keeps the core concept, genre and medium (an armored wolf warrior, painterly fantasy concept art) and changes the character (sex, fur, hood), gear, pose, setting, lighting and palette. Regenerating a regeneration drifts further, so each call starts from the image it is given. The server-side prompt that does this is not visible; the clone's is a reconstruction.
+
+**More like this** (1 call):
+
+```
+[[[[["More like this"], [null×7, [1, "<file>", "<srcBlockId>"]]], "user", null×7, [null, 4]]], null, null, projectId, boardId]
+```
+
+- The prompt is the literal `More like this`. The trailing `[null, 4]` is unknown (the source is portrait, so 4 is not the 16:9 aspect code of §4.5).
+- The response first creates **3 blocks** named `<Title> Variant 1..3` (e.g. "Lupine Warrior Variant 1"), the source's size, in a row 20 px apart (x = -763, -376, 10; y = 2010, far below the source), with block index 13 = `[null, null, 2]`. The same chunk carries 3 follow-up suggestions, e.g. "Change the armor to a different metallic style", "Add more fantasy magical elements to the character's equipment", "Show this character in a different environment".
+- Each variant is then generated from **its own long description**, and the descriptions differ (misty forest with a polearm; stone ruin at twilight with a sword at the hip; three-quarter gothic-armor portrait). Each description is stored both as the block's prompt (index 5) and as its caption description; the caption title is empty. None of them name the character (consistent with D3).
+- Output: faithful siblings of the source (same subject, gear, pose and framing), at the source's aspect ratio (a variant was 864×1184, about 3:4).
+
+**Clone:** `prompts/regenerate-prompt.md` and `prompts/more-like-this-prompt.md` are our reconstructions from these outputs, not recovered text. A vision model (the caption model) reads the source with them; the image model then generates from text only, with no reference image. See `docs/superpowers/specs/2026-09-24-regenerate-more-like-this-design.md`.
+
+**Clone, failed images:** a failed image offers **Try again**, which re-runs the same generation into the same block (`POST /api/blocks/:id/retry`), replaying its recipe from its origin and stored prompt. For this the agent's image tools store the full prompt, style included, on the block. Failures with nothing to replay (no prompt, not from Regenerate) show no button.
 
 ## 5. Data model
 
@@ -379,6 +414,8 @@ Arg notes from real calls:
 
 - `aspect_ratio`: `1:1`, `16:9`, `9:16`, `4:3`, `3:4` (skill file). Omitted on edit/regenerate so the source size is kept.
 - `intent`: `create` (default, also for combining), `edit`, `regenerate`, `variation` (3 calls), `transform` (restyle / apply saved style). `edit` and `regenerate` go through `update_image_block`; the rest through `create_image_block`.
+- **Mixboard never replaces an image** (user's firsthand observation, confirmed for Regenerate and More like this by the captures in §4.6): Regenerate and edits always produce a new block next to the source. The clone's `update_image_block` therefore ignores `create_new_block_for_update: false`.
+- The **Regenerate** and **More like this** buttons on an image do not use these intents: they bypass the agent (§4.6). The `regenerate` and `variation` intents only apply when the user asks for them in chat.
 - `style`: free text, e.g. `"classic oil painting, rich colors, soft lighting, detailed brushwork"`. Not an enum.
 - `source_block_ids`: board images used as references, e.g. a "combine these characters into one scene" request passed 4 block IDs with `intent: "create"`.
 - Image `prompt`: one descriptive sentence (medium + subject + details + lighting).
@@ -510,6 +547,7 @@ Closed by the 2026-09-24 recapture: the image-edit call (§4.5), `update_text_bl
 - The system prompt and the tagline prompt. Both are server-side; no JS chunk contains them. Direct asks are refused.
 - Image-generation model (C2PA points to a Google image model). No model name appears in the client.
 - Not captured: `update_image_block`, `get_spatial_context`, `get_style`/`delete_style`, the write-back after an image edit, the finished presentation (`vZrjA` only starts it; in the user's tests on 2026-09-24 generation spun for 30+ minutes and never finished, and reloading restarted the timer, so the feature appears broken at shutdown time; presentation is out of scope for v1), `TEbwnd` response.
+- Regenerate and More like this (§4.6): whether Regenerate sends a prompted image's prompt, the server-side prompts behind both, the meaning of More like this's `[null, 4]`, and how the variants' row position (far below the source) is chosen.
 - Where the 73 style presets (§7.10) appear in the UI, and whether they feed `create_image_block`.
 - Export menu strings were not found in any downloaded chunk; probably a lazily loaded chunk.
 - Unknown fields, unchanged after recapture: project 5–6 (always `1,1`), board 5–9 (always null; index 10 is a per-board token), block 7/9/12 (null on every block seen, user and AI). Block 13 is null for uploads and text.

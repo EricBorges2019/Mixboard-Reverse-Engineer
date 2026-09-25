@@ -27,6 +27,8 @@ button { font: inherit; cursor: pointer; }
 .msg p { margin: 0 0 6px; }
 .status { color: #666; font-style: italic; }
 .chip { border: 1px solid #c9c4ba; background: #fff; border-radius: 999px; padding: 0 8px; }
+.lineage { margin-top: 12px; border-top: 1px solid #e3dfd6; padding-top: 8px; }
+.lineage p { margin: 4px 0; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .clarification fieldset { border: 0; padding: 0; margin: 0 0 8px; }
 .clarification legend { font-weight: 600; margin-bottom: 4px; }
 .suggestion { margin: 0 6px 6px 0; padding: 4px 10px; border: 1px solid #c9c4ba; background: #fff; border-radius: 999px; }
@@ -38,3 +40,5 @@ button { font: inherit; cursor: pointer; }
 .style-card { border: 1px solid #eee; border-radius: 8px; padding: 8px; margin: 8px 0; }
 .style-card img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; float: right; }
 .style-card pre { white-space: pre-wrap; font: inherit; font-size: 0.85em; }
+/* Keep "More like this" on one line in the image toolbar. */
+.mb-image-toolbar .tlui-button__label { white-space: nowrap; }
