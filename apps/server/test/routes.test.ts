@@ -87,6 +87,17 @@ describe('routes', () => {
     expect((await (await call('GET', '/api/settings')).json()).puns).toBe(true);
   });
 
+  it('masks a set API key on read, keeps it when the mask is echoed back, and clears it with null', async () => {
+    const { call } = setup();
+    const got = await (await call('GET', '/api/settings')).json();
+    expect(got.apiKey).toBe('••••••••');
+    const echoed = await (await call('PUT', '/api/settings', { apiKey: got.apiKey, baseUrl: 'http://localhost:1234/v1' })).json();
+    expect(echoed.apiKey).toBe(got.apiKey);
+    expect(echoed.baseUrl).toBe('http://localhost:1234/v1');
+    const cleared = await (await call('PUT', '/api/settings', { apiKey: null })).json();
+    expect(cleared.apiKey).toBeNull();
+  });
+
   it('lists only user and assistant text as chat history', async () => {
     const { call, repo } = setup();
     const { board } = await (await call('POST', '/api/projects')).json();

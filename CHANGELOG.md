@@ -6,6 +6,9 @@ Add a line under **Unreleased** whenever a change lands that a user of the app w
 
 ## [Unreleased]
 
+### Added
+- Settings panel fields to enter a provider API key and a custom base URL (any OpenAI-compatible chat-completions endpoint — OpenRouter, OpenAI, or a local server), overriding `OPENROUTER_API_KEY`/`OPENROUTER_BASE_URL` from `.env` without a server restart. The key is masked once set and never round-trips back to the browser in full.
+
 ## [0.3.1] - 2026-09-24
 
 ### Added

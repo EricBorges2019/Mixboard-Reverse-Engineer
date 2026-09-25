@@ -13,6 +13,8 @@ export const defaultSettings: Settings = {
   cropRegenerated: true,
   showLineage: false,
   lineageFade: true,
+  apiKey: 'test-key',
+  baseUrl: 'https://openrouter.ai/api/v1',
   models: { agent: 'test/agent', caption: 'test/caption', tagline: 'test/tagline', image: 'test/image' },
 };
 

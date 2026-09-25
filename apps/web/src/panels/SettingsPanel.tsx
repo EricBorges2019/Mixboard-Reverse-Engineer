@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Models, Settings, SettingsPatch } from '@mixboard/shared';
+import { API_KEY_MASK, type Models, type Settings, type SettingsPatch } from '@mixboard/shared';
 
 const MODEL_FIELDS: { key: keyof Models; label: string }[] = [
   { key: 'agent', label: 'Agent model' },
@@ -9,12 +9,14 @@ const MODEL_FIELDS: { key: keyof Models; label: string }[] = [
 ];
 
 /**
- * Settings: the Puns switch (D2), the crop switch for Regenerate (D4), the two lineage arrow switches (D5) and the four model ids.
+ * Settings: the Puns switch (D2), the crop switch for Regenerate (D4), the two lineage arrow switches (D5), the four model ids, and the provider API key/base URL.
  * Precondition: `settings` are loaded.
- * Postcondition: each switch calls `update` with its setting flipped (`puns`, `cropRegenerated`, `showLineage`, `lineageFade`); `Save models` calls `update({models})` with the edited ids. The OpenRouter key is not editable here: it lives in the server's `.env`.
+ * Postcondition: each switch calls `update` with its setting flipped (`puns`, `cropRegenerated`, `showLineage`, `lineageFade`); `Save models` calls `update({models})` with the edited ids; `Save connection` calls `update({apiKey, baseUrl})`, leaving `apiKey` out of the patch when the field was left untouched so the stored key is kept; `Clear key` sends `apiKey: null`.
  */
 export function SettingsPanel({ settings, update }: { settings: Settings; update(patch: SettingsPatch): Promise<void> }) {
   const [models, setModels] = useState<Models>(settings.models);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [baseUrl, setBaseUrl] = useState(settings.baseUrl);
   return (
     <div className="settings">
       <div className="row">
@@ -48,7 +50,43 @@ export function SettingsPanel({ settings, update }: { settings: Settings; update
         <label key={key}>{label}<input value={models[key]} onChange={(e) => setModels({ ...models, [key]: e.target.value })} /></label>
       ))}
       <button onClick={() => void update({ models })}>Save models</button>
-      <p className="hint">The OpenRouter API key is read from <code>.env</code> on the server and never sent to the browser.</p>
+
+      <label>
+        API key
+        <input
+          type="password"
+          value={apiKeyInput}
+          onChange={(e) => setApiKeyInput(e.target.value)}
+          placeholder={settings.apiKey === API_KEY_MASK ? 'Key is set — leave blank to keep it' : 'sk-...'}
+        />
+      </label>
+      <label>
+        Base URL
+        <input
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          placeholder="https://openrouter.ai/api/v1"
+        />
+      </label>
+      <div className="row">
+        <button
+          onClick={() => {
+            const patch: SettingsPatch = { baseUrl };
+            if (apiKeyInput) patch.apiKey = apiKeyInput;
+            void update(patch).then(() => setApiKeyInput(''));
+          }}
+        >
+          Save connection
+        </button>
+        {settings.apiKey && (
+          <button onClick={() => void update({ apiKey: null }).then(() => setApiKeyInput(''))}>Clear key</button>
+        )}
+      </div>
+      <p className="hint">
+        The key and base URL are stored on the server, not the browser. Falls back to <code>OPENROUTER_API_KEY</code>/<code>OPENROUTER_BASE_URL</code> from
+        <code>.env</code> when unset here. Any OpenAI-compatible chat-completions endpoint works — OpenRouter, OpenAI, or a local server (e.g. Ollama, LM Studio).
+        Anthropic's native API uses a different wire format and is not supported by this base URL.
+      </p>
     </div>
   );
 }

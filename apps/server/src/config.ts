@@ -20,16 +20,20 @@ export interface Config {
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const agent = env.AGENT_MODEL ?? 'google/gemini-3-flash-preview';
+  const apiKey = env.OPENROUTER_API_KEY || null;
+  const baseUrl = env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1';
   return {
     port: Number(env.PORT ?? 8787),
     dataDir: resolve(env.DATA_DIR ?? fileURLToPath(new URL('../../../data', import.meta.url))),
-    apiKey: env.OPENROUTER_API_KEY || null,
-    baseUrl: env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
+    apiKey,
+    baseUrl,
     defaults: {
       puns: false,
       cropRegenerated: true,
       showLineage: false,
       lineageFade: true,
+      apiKey,
+      baseUrl,
       models: {
         agent,
         caption: env.CAPTION_MODEL ?? agent,
