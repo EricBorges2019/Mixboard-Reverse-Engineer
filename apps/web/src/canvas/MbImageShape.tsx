@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useLayoutEffect, useRef, useState } from 'react';
 import { BaseBoxShapeUtil, HTMLContainer, T, type RecordProps, type TLShape } from 'tldraw';
 import { imageShapeTarget } from './imageActions';
 import { ImageActionContext } from './ImageToolbar';
@@ -63,18 +63,50 @@ export class MbImageShapeUtil extends BaseBoxShapeUtil<MbImageShape> {
   }
 }
 
+const FAILURE_TEXT = 'Generation failed';
+/** Width of FAILURE_TEXT in em, by font family, so each family is measured once. */
+const failureTextEm = new Map<string, number>();
+
+/**
+ * Measures FAILURE_TEXT in a font family, since the UI font varies by platform (system-ui is much wider on Linux than on macOS).
+ * Precondition: `fontFamily` is a CSS font-family value.
+ * Postcondition: returns the text's width in em; falls back to 7.2 (macOS's system font) when canvas text measurement is unavailable, as in jsdom.
+ */
+function measureFailureTextEm(fontFamily: string): number {
+  const cached = failureTextEm.get(fontFamily);
+  if (cached !== undefined) return cached;
+  let em = 7.2;
+  try {
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (ctx) {
+      ctx.font = `100px ${fontFamily}`;
+      const width = ctx.measureText(FAILURE_TEXT).width;
+      if (width > 0) em = width / 100;
+    }
+  } catch {
+    // Keep the fallback.
+  }
+  failureTextEm.set(fontFamily, em);
+  return em;
+}
+
 /**
  * The notice on a failed image: "Generation failed" and, when there is something to replay, a Try again button.
  * Precondition: rendered inside the shape's size container, under an ImageActionContext provider.
- * Postcondition: text and button are sized from the block (nearly edge to edge on the width, bounded by the height), so they stay proportional at any block size and zoom. Try again starts the `retry` action for this block, which regenerates it in place.
+ * Postcondition: text and button are sized from the block (the text spans ~90% of the width in whatever font the platform uses, bounded by the height), so they stay proportional at any block size and zoom. Try again starts the `retry` action for this block, which regenerates it in place.
  */
 function FailureNotice({ shape }: { shape: MbImageShape }) {
   const runAction = useContext(ImageActionContext);
   const target = imageShapeTarget(shape, 'error')!;
+  const ref = useRef<HTMLDivElement>(null);
+  const [textEm, setTextEm] = useState(7.2);
+  useLayoutEffect(() => {
+    if (ref.current) setTextEm(measureFailureTextEm(getComputedStyle(ref.current).fontFamily));
+  }, []);
   return (
-    // "Generation failed" is about 7.2em wide in the UI font: 12.5cqw spans ~90% of the block; 26cqh keeps text and button inside short blocks.
-    <div style={{ textAlign: 'center', color: '#8a1f1f', fontSize: 'min(12.5cqw, 26cqh)', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
-      <div data-testid="failure-text" style={{ width: 'fit-content', margin: '0 auto' }}>Generation failed</div>
+    // 90cqw / textEm makes the text span ~90% of the block; 26cqh keeps text and button inside short blocks.
+    <div ref={ref} style={{ textAlign: 'center', color: '#8a1f1f', fontSize: `min(${(90 / textEm).toFixed(2)}cqw, 26cqh)`, lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+      <div data-testid="failure-text" style={{ width: 'fit-content', margin: '0 auto' }}>{FAILURE_TEXT}</div>
       {shape.props.retryable && (
         <button
           style={{ font: 'inherit', marginTop: '0.3em', padding: '0.15em 0.6em', borderRadius: '0.3em' }}
