@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { plainTextToDoc, wrapTextContent, type Block } from '@mixboard/shared';
-import { blockIdFromShapeId, blockToShapeInput, captionKey, fitRect, mergeBlock, shapeIdFor, textShapeToContent } from '../src/canvas/mapping';
+import { blockIdFromShapeId, blockToShapeInput, captionKey, findClusterOrigin, fitRect, mergeBlock, packBundle, rectsOverlap, shapeIdFor, textShapeToContent } from '../src/canvas/mapping';
 
 const base: Block = {
   id: 'b1', projectId: 'p', boardId: 'bd', type: 'image', name: 'Dragon', rect: { x: 10, y: 20, w: 300, h: 200 }, zIndex: 1,
@@ -63,5 +63,45 @@ describe('helpers', () => {
     const withCaption = { ...base, resources: [{ ...imageResource, caption: { title: 'T', description: 'D', userEdited: false } }] };
     expect(captionKey(withCaption)).not.toBe(captionKey(base));
     expect(captionKey(base)).toBe(captionKey({ ...base }));
+  });
+});
+
+describe('rectsOverlap', () => {
+  it('detects intersection and margin-inflated near-misses', () => {
+    expect(rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 5, y: 5, w: 10, h: 10 })).toBe(true);
+    expect(rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 10, y: 0, w: 10, h: 10 })).toBe(false);
+    expect(rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 10, y: 0, w: 10, h: 10 }, 5)).toBe(true);
+  });
+});
+
+describe('packBundle', () => {
+  it('lays images into a square-ish grid with no cell overlapping another', () => {
+    const sizes = [{ w: 100, h: 60 }, { w: 80, h: 120 }, { w: 50, h: 50 }, { w: 90, h: 90 }];
+    const grid = packBundle(sizes, 20);
+    expect(grid.offsets).toHaveLength(4);
+    const rects = sizes.map((s, i) => ({ ...grid.offsets[i], ...s }));
+    for (let i = 0; i < rects.length; i++) {
+      for (let j = i + 1; j < rects.length; j++) expect(rectsOverlap(rects[i], rects[j])).toBe(false);
+    }
+    expect(grid.w).toBeGreaterThanOrEqual(Math.max(...sizes.map((s) => s.w)));
+    expect(grid.h).toBeGreaterThanOrEqual(Math.max(...sizes.map((s) => s.h)));
+  });
+
+  it('packs a single image with no gap padding it', () => {
+    expect(packBundle([{ w: 50, h: 40 }], 20)).toEqual({ w: 50, h: 40, offsets: [{ x: 0, y: 0 }] });
+  });
+});
+
+describe('findClusterOrigin', () => {
+  it('centers the cluster on the drop point when nothing is in the way', () => {
+    expect(findClusterOrigin({ w: 100, h: 50 }, { x: 200, y: 200 }, [], 20)).toEqual({ x: 150, y: 175 });
+  });
+
+  it('moves the cluster clear of an existing rect covering the drop point', () => {
+    const existing = [{ x: 0, y: 0, w: 400, h: 400 }];
+    const size = { w: 100, h: 100 };
+    const origin = findClusterOrigin(size, { x: 200, y: 200 }, existing, 20);
+    const rect = { ...origin, ...size };
+    expect(rectsOverlap(rect, existing[0], 20)).toBe(false);
   });
 });
