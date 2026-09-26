@@ -6,6 +6,9 @@ Add a line under **Unreleased** whenever a change lands that a user of the app w
 
 ## [Unreleased]
 
+### Fixed
+- The "Generation failed" notice no longer spills past its block on Linux, where the system font is wider.
+
 ## [0.3.1] - 2026-09-24
 
 ### Added
