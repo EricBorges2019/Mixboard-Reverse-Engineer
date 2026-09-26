@@ -35,10 +35,19 @@ async function decodeImageUrl(url: string, fetchImpl: typeof fetch): Promise<Gen
 export class OpenRouterLlm implements Llm {
   /**
    * Creates a client.
-   * Precondition: `opts.baseUrl` is the OpenRouter API root without a trailing slash.
-   * Postcondition: no network activity happens until a method is called.
+   * Precondition: `optsSource.baseUrl` (or the object returned by calling it) is the API root without a trailing slash.
+   * Postcondition: no network activity happens until a method is called. A function source is called on every request, so a live settings change (key, base URL) applies immediately.
    */
-  constructor(private readonly opts: OpenRouterOptions) {}
+  constructor(private readonly optsSource: OpenRouterOptions | (() => OpenRouterOptions)) {}
+
+  /**
+   * Resolves the live options.
+   * Precondition: none.
+   * Postcondition: returns the static options object, or the result of calling the function source.
+   */
+  private get opts(): OpenRouterOptions {
+    return typeof this.optsSource === 'function' ? this.optsSource() : this.optsSource;
+  }
 
   /**
    * POSTs to /chat/completions and returns the parsed JSON.
@@ -46,7 +55,7 @@ export class OpenRouterLlm implements Llm {
    * Postcondition: returns the response body; throws LlmError (with HTTP status when known) on a missing key, non-2xx, or an error object in the body.
    */
   private async post(body: unknown, signal?: AbortSignal): Promise<any> {
-    if (!this.opts.apiKey) throw new LlmError('OPENROUTER_API_KEY is not set. Add it to .env and restart the server.');
+    if (!this.opts.apiKey) throw new LlmError('No API key configured. Set OPENROUTER_API_KEY in .env, or add a key in Settings.');
     const res = await (this.opts.fetchImpl ?? fetch)(`${this.opts.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${this.opts.apiKey}`, 'content-type': 'application/json', 'x-title': 'Mixboard Clone' },

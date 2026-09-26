@@ -49,7 +49,11 @@ describe('Inspector', () => {
 });
 
 describe('SettingsPanel', () => {
-  const settings: Settings = { puns: false, cropRegenerated: true, showLineage: false, lineageFade: true, models: { agent: 'a', caption: 'c', tagline: 't', image: 'i' } };
+  const settings: Settings = {
+    puns: false, cropRegenerated: true, showLineage: false, lineageFade: true,
+    apiKey: null, baseUrl: 'https://openrouter.ai/api/v1',
+    models: { agent: 'a', caption: 'c', tagline: 't', image: 'i' },
+  };
   it('toggles the two lineage arrow settings', () => {
     const update = vi.fn(async () => {});
     render(<SettingsPanel settings={settings} update={update} />);
@@ -79,5 +83,28 @@ describe('SettingsPanel', () => {
     fireEvent.change(screen.getByLabelText('Image model'), { target: { value: 'openai/gpt-image-2.5-flare' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save models' }));
     expect(update).toHaveBeenCalledWith({ models: { agent: 'a', caption: 'c', tagline: 't', image: 'openai/gpt-image-2.5-flare' } });
+  });
+  it('omits apiKey from the patch when the field is left blank', () => {
+    const update = vi.fn(async () => {});
+    render(<SettingsPanel settings={settings} update={update} />);
+    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'http://localhost:11434/v1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save connection' }));
+    expect(update).toHaveBeenCalledWith({ baseUrl: 'http://localhost:11434/v1' });
+  });
+  it('includes a typed API key in the patch', () => {
+    const update = vi.fn(async () => {});
+    render(<SettingsPanel settings={settings} update={update} />);
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-secret' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save connection' }));
+    expect(update).toHaveBeenCalledWith({ baseUrl: settings.baseUrl, apiKey: 'sk-secret' });
+  });
+  it('shows a Clear key button only once a key is set, and sends apiKey: null', () => {
+    const update = vi.fn(async () => {});
+    const { rerender } = render(<SettingsPanel settings={settings} update={update} />);
+    expect(screen.queryByRole('button', { name: 'Clear key' })).toBeNull();
+    const withKey: Settings = { ...settings, apiKey: '••••••••' };
+    rerender(<SettingsPanel settings={withKey} update={update} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Clear key' }));
+    expect(update).toHaveBeenCalledWith({ apiKey: null });
   });
 });

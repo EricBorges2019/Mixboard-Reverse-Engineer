@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { Hono } from 'hono';
-import { SettingsPatch } from '@mixboard/shared';
+import { API_KEY_MASK, SettingsPatch } from '@mixboard/shared';
 import type { AppDeps } from '../app';
 
 /**
@@ -19,6 +19,14 @@ export function registerMiscRoutes(app: Hono, { repo }: AppDeps): void {
     repo.deleteStyle(c.req.param('id'));
     return c.body(null, 204);
   });
-  app.get('/api/settings', (c) => c.json(repo.getSettings()));
-  app.put('/api/settings', async (c) => c.json(repo.updateSettings(SettingsPatch.parse(await c.req.json()))));
+  app.get('/api/settings', (c) => {
+    const settings = repo.getSettings();
+    return c.json({ ...settings, apiKey: settings.apiKey ? API_KEY_MASK : null });
+  });
+  app.put('/api/settings', async (c) => {
+    const patch = SettingsPatch.parse(await c.req.json());
+    if (patch.apiKey === API_KEY_MASK) delete patch.apiKey; // client echoed the mask back unchanged: keep the stored key
+    const settings = repo.updateSettings(patch);
+    return c.json({ ...settings, apiKey: settings.apiKey ? API_KEY_MASK : null });
+  });
 }

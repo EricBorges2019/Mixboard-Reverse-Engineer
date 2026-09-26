@@ -114,7 +114,20 @@ export type Models = z.infer<typeof Models>;
 export const SETTING_FLAGS = ['puns', 'cropRegenerated', 'showLineage', 'lineageFade'] as const;
 export type SettingFlag = (typeof SETTING_FLAGS)[number];
 
-export const Settings = z.object({ puns: z.boolean(), cropRegenerated: z.boolean(), showLineage: z.boolean(), lineageFade: z.boolean(), models: Models });
+/** Placeholder the server sends back in place of a real, already-set API key; the client must never re-submit it as a value. */
+export const API_KEY_MASK = '••••••••';
+
+export const Settings = z.object({
+  puns: z.boolean(),
+  cropRegenerated: z.boolean(),
+  showLineage: z.boolean(),
+  lineageFade: z.boolean(),
+  /** The provider API key. Null when unset (falls back to the server's env var, if any). */
+  apiKey: z.string().nullable(),
+  /** The chat-completions-style API root (OpenRouter, OpenAI, an OpenAI-compatible localhost server, etc). */
+  baseUrl: z.string(),
+  models: Models,
+});
 export type Settings = z.infer<typeof Settings>;
 
 export const SettingsPatch = Settings.omit({ models: true }).partial().extend({ models: Models.partial().optional() });

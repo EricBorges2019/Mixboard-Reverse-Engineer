@@ -40,8 +40,18 @@ describe('OpenRouterLlm.chat', () => {
   });
   it('fails fast without an API key', async () => {
     const f = await fake([]);
-    await expect(new OpenRouterLlm({ apiKey: null, baseUrl: f.url }).chat({ model: 'm', messages: [] })).rejects.toThrow(/OPENROUTER_API_KEY/);
+    await expect(new OpenRouterLlm({ apiKey: null, baseUrl: f.url }).chat({ model: 'm', messages: [] })).rejects.toThrow(/No API key configured/);
     expect(f.requests).toHaveLength(0);
+  });
+  it('re-reads a function-based options source on every call, so a live key/base URL change applies immediately', async () => {
+    const f = await fake([chatReply({ content: 'first' }), chatReply({ content: 'second' })]);
+    let apiKey = 'k1';
+    const llm = new OpenRouterLlm(() => ({ apiKey, baseUrl: f.url }));
+    await llm.chat({ model: 'm', messages: [] });
+    expect(f.headers[0].authorization).toBe('Bearer k1');
+    apiKey = 'k2';
+    await llm.chat({ model: 'm', messages: [] });
+    expect(f.headers[1].authorization).toBe('Bearer k2');
   });
 });
 

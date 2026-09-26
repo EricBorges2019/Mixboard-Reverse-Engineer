@@ -16,7 +16,15 @@ try { process.loadEnvFile(fileURLToPath(new URL('../../../.env', import.meta.url
 const config = loadConfig();
 mkdirSync(config.dataDir, { recursive: true });
 const repo = new Repo(openDb(join(config.dataDir, 'mixboard.sqlite')), join(config.dataDir, 'files'), config.defaults);
-const llm = new OpenRouterLlm({ apiKey: config.apiKey, baseUrl: config.baseUrl });
+/**
+ * Reads the API key and base URL at call time, so a Settings change applies to the next request.
+ * Precondition: none.
+ * Postcondition: returns the effective apiKey/baseUrl, falling back to the .env-derived config when no override is stored.
+ */
+const llm = new OpenRouterLlm(() => {
+  const settings = repo.getSettings();
+  return { apiKey: settings.apiKey, baseUrl: settings.baseUrl };
+});
 const captionJob = createCaptionJob({
   repo,
   llm,
@@ -39,5 +47,5 @@ function onImageAdded(resourceId: string): void {
 
 const app = createApp({ repo, config, onImageAdded, agent: { repo, llm, registry: new SkillRegistry(buildSkills()), config, onImageAdded } });
 serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`Mixboard server on http://localhost:${info.port}${config.apiKey ? '' : ' (OPENROUTER_API_KEY is not set: the agent will fail until you add it to .env)'}`);
+  console.log(`Mixboard server on http://localhost:${info.port}${config.apiKey ? '' : ' (no API key: set OPENROUTER_API_KEY in .env, or add one in Settings, before using the agent)'}`);
 });
