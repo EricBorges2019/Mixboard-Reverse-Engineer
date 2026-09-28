@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect } from 'vitest';
 import { LlmError, NoImageError } from '../src/llm/types';
-import { OpenRouterLlm } from '../src/llm/openrouter';
+import { isLocalBaseUrl, OpenRouterLlm } from '../src/llm/openrouter';
 import { chatReply, imageReply, startFakeOpenRouter } from './fakeOpenRouter';
 
 let closers: (() => Promise<void>)[] = [];
@@ -38,10 +38,26 @@ describe('OpenRouterLlm.chat', () => {
     expect(err.message).toBe('slow down');
     expect(err.status).toBe(429);
   });
-  it('fails fast without an API key', async () => {
-    const f = await fake([]);
-    await expect(new OpenRouterLlm({ apiKey: null, baseUrl: f.url }).chat({ model: 'm', messages: [] })).rejects.toThrow(/OPENROUTER_API_KEY/);
-    expect(f.requests).toHaveLength(0);
+  it('fails fast without an API key on a remote base URL', async () => {
+    let calls = 0;
+    const fetchImpl = async () => { calls++; return new Response('{}'); };
+    await expect(new OpenRouterLlm({ apiKey: null, baseUrl: 'https://api.openai.com/v1', fetchImpl }).chat({ model: 'm', messages: [] })).rejects.toThrow(/OPENROUTER_API_KEY/);
+    expect(calls).toBe(0);
+  });
+  it('calls a local base URL without a key and without an authorization header', async () => {
+    const f = await fake([chatReply({ content: 'hi' })]);
+    const r = await new OpenRouterLlm({ apiKey: null, baseUrl: f.url }).chat({ model: 'm', messages: [] });
+    expect(r.message.content).toBe('hi');
+    expect(f.headers[0].authorization).toBeUndefined();
+  });
+  it('reads a function base URL on every call', async () => {
+    const a = await fake([chatReply({ content: 'a' })]);
+    const b = await fake([chatReply({ content: 'b' })]);
+    let url = a.url;
+    const llm = new OpenRouterLlm({ apiKey: 'k', baseUrl: () => url });
+    expect((await llm.chat({ model: 'm', messages: [] })).message.content).toBe('a');
+    url = b.url;
+    expect((await llm.chat({ model: 'm', messages: [] })).message.content).toBe('b');
   });
 });
 
@@ -79,5 +95,12 @@ describe('OpenRouterLlm.generateImage', () => {
     const err = await new OpenRouterLlm({ apiKey: 'k', baseUrl: f.url }).generateImage({ model: 'img', prompt: 'p', aspectRatio: '1:1' }).catch((e) => e);
     expect(err).toBeInstanceOf(NoImageError);
     expect(err.message).toContain('I cannot draw that.');
+  });
+});
+
+describe('isLocalBaseUrl', () => {
+  it('accepts loopback hosts only', () => {
+    for (const u of ['http://localhost:11434/v1', 'http://127.0.0.1:1234/v1', 'http://[::1]:8080/v1']) expect(isLocalBaseUrl(u)).toBe(true);
+    for (const u of ['https://openrouter.ai/api/v1', 'https://api.anthropic.com/v1', 'not a url']) expect(isLocalBaseUrl(u)).toBe(false);
   });
 });

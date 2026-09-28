@@ -66,7 +66,7 @@ const config = loadConfig({
   AGENT_MODEL: 'test/agent', CAPTION_MODEL: 'test/caption', TAGLINE_MODEL: 'test/tagline', IMAGE_MODEL: 'test/image',
 });
 const repo = new Repo(openDb(':memory:'), join(dir, 'files'), config.defaults);
-const llm = new OpenRouterLlm({ apiKey: config.apiKey, baseUrl: config.baseUrl });
+const llm = new OpenRouterLlm({ apiKey: config.apiKey, baseUrl: config.defaults.baseUrl });
 const captionJob = createCaptionJob({
   repo,
   llm,

@@ -114,8 +114,12 @@ export type Models = z.infer<typeof Models>;
 export const SETTING_FLAGS = ['puns', 'cropRegenerated', 'showLineage', 'lineageFade'] as const;
 export type SettingFlag = (typeof SETTING_FLAGS)[number];
 
-export const Settings = z.object({ puns: z.boolean(), cropRegenerated: z.boolean(), showLineage: z.boolean(), lineageFade: z.boolean(), models: Models });
+/** Root of an OpenAI-compatible chat-completions API (OpenRouter, OpenAI, Anthropic, a local server), without a trailing slash. */
+export const BaseUrl = z.string().trim().regex(/^https?:\/\/[^\s/]+(\/\S*)?$/, 'Base URL must start with http:// or https://').transform((s) => s.replace(/\/+$/, ''));
+
+export const Settings = z.object({ puns: z.boolean(), cropRegenerated: z.boolean(), showLineage: z.boolean(), lineageFade: z.boolean(), models: Models, baseUrl: z.string() });
 export type Settings = z.infer<typeof Settings>;
 
-export const SettingsPatch = Settings.omit({ models: true }).partial().extend({ models: Models.partial().optional() });
+/** A settings change. `baseUrl: ''` clears the override so the server's default applies again. */
+export const SettingsPatch = Settings.omit({ models: true, baseUrl: true }).partial().extend({ models: Models.partial().optional(), baseUrl: BaseUrl.or(z.literal('')).optional() });
 export type SettingsPatch = z.infer<typeof SettingsPatch>;

@@ -13,7 +13,7 @@ try { process.loadEnvFile(fileURLToPath(new URL('../../../.env', import.meta.url
  */
 async function main(): Promise<void> {
   const config = loadConfig();
-  const listed = (await (await fetch(`${config.baseUrl}/models`)).json()) as { data: { id: string }[] };
+  const listed = (await (await fetch(`${config.defaults.baseUrl}/models`)).json()) as { data: { id: string }[] };
   const ids = new Set(listed.data.map((m) => m.id));
   for (const [role, id] of Object.entries(config.defaults.models)) {
     const ok = ids.has(id);
@@ -21,7 +21,7 @@ async function main(): Promise<void> {
     if (!ok) process.exitCode = 1;
   }
   if (!process.argv.includes('--live')) return;
-  const llm = new OpenRouterLlm({ apiKey: config.apiKey, baseUrl: config.baseUrl });
+  const llm = new OpenRouterLlm({ apiKey: config.apiKey, baseUrl: config.defaults.baseUrl });
   for (const ratio of AspectRatio.options) {
     try {
       const img = await llm.generateImage({ model: config.defaults.models.image, prompt: 'A simple red circle centered on a white background', aspectRatio: ratio });

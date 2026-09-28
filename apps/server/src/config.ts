@@ -1,12 +1,11 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { AspectRatio, type Settings } from '@mixboard/shared';
+import { AspectRatio, BaseUrl, type Settings } from '@mixboard/shared';
 
 export interface Config {
   port: number;
   dataDir: string;
   apiKey: string | null;
-  baseUrl: string;
   defaults: Settings;
   maxAgentSteps: number;
   imageSupportedRatios: AspectRatio[];
@@ -16,16 +15,16 @@ export interface Config {
  * Builds the server configuration from environment variables.
  * Precondition: `env` values, when set, are valid (ratios are members of AspectRatio, numbers parse).
  * Postcondition: returns a fully populated Config; unset variables take the documented defaults.
- * Throws a ZodError when IMAGE_SUPPORTED_RATIOS contains an unknown ratio.
+ * Throws a ZodError when IMAGE_SUPPORTED_RATIOS contains an unknown ratio or LLM_BASE_URL is not an http(s) URL.
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const agent = env.AGENT_MODEL ?? 'google/gemini-3-flash-preview';
   return {
     port: Number(env.PORT ?? 8787),
     dataDir: resolve(env.DATA_DIR ?? fileURLToPath(new URL('../../../data', import.meta.url))),
-    apiKey: env.OPENROUTER_API_KEY || null,
-    baseUrl: env.OPENROUTER_BASE_URL ?? 'https://openrouter.ai/api/v1',
+    apiKey: env.LLM_API_KEY || env.OPENROUTER_API_KEY || null,
     defaults: {
+      baseUrl: BaseUrl.parse(env.LLM_BASE_URL || env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1'),
       puns: false,
       cropRegenerated: true,
       showLineage: false,

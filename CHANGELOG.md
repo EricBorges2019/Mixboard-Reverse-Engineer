@@ -6,6 +6,9 @@ Add a line under **Unreleased** whenever a change lands that a user of the app w
 
 ## [Unreleased]
 
+### Added
+- Custom API base URL, in the Settings tab or `LLM_BASE_URL` in `.env`: use OpenAI, Anthropic, or a local server instead of OpenRouter. Local servers need no key.
+
 ### Fixed
 - The "Generation failed" notice no longer spills past its block on Linux, where the system font is wider.
 

@@ -16,7 +16,15 @@ try { process.loadEnvFile(fileURLToPath(new URL('../../../.env', import.meta.url
 const config = loadConfig();
 mkdirSync(config.dataDir, { recursive: true });
 const repo = new Repo(openDb(join(config.dataDir, 'mixboard.sqlite')), join(config.dataDir, 'files'), config.defaults);
-const llm = new OpenRouterLlm({ apiKey: config.apiKey, baseUrl: config.baseUrl });
+const llm = new OpenRouterLlm({
+  apiKey: config.apiKey,
+  /**
+   * Reads the base URL at call time so a settings change applies to the next request.
+   * Precondition: none.
+   * Postcondition: returns the current base URL.
+   */
+  baseUrl: () => repo.getSettings().baseUrl,
+});
 const captionJob = createCaptionJob({
   repo,
   llm,

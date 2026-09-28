@@ -49,7 +49,7 @@ describe('Inspector', () => {
 });
 
 describe('SettingsPanel', () => {
-  const settings: Settings = { puns: false, cropRegenerated: true, showLineage: false, lineageFade: true, models: { agent: 'a', caption: 'c', tagline: 't', image: 'i' } };
+  const settings: Settings = { puns: false, cropRegenerated: true, showLineage: false, lineageFade: true, models: { agent: 'a', caption: 'c', tagline: 't', image: 'i' }, baseUrl: 'https://openrouter.ai/api/v1' };
   it('toggles the two lineage arrow settings', () => {
     const update = vi.fn(async () => {});
     render(<SettingsPanel settings={settings} update={update} />);
@@ -79,5 +79,18 @@ describe('SettingsPanel', () => {
     fireEvent.change(screen.getByLabelText('Image model'), { target: { value: 'openai/gpt-image-2.5-flare' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save models' }));
     expect(update).toHaveBeenCalledWith({ models: { agent: 'a', caption: 'c', tagline: 't', image: 'openai/gpt-image-2.5-flare' } });
+  });
+  it('saves a valid base URL without its trailing slash and rejects an invalid one', () => {
+    const update = vi.fn(async () => {});
+    render(<SettingsPanel settings={settings} update={update} />);
+    const input = screen.getByLabelText('API base URL');
+    fireEvent.change(input, { target: { value: 'localhost:11434' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save base URL' }));
+    expect(update).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toMatch(/http/);
+    fireEvent.change(input, { target: { value: 'http://localhost:11434/v1/' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save base URL' }));
+    expect(update).toHaveBeenCalledWith({ baseUrl: 'http://localhost:11434/v1' });
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

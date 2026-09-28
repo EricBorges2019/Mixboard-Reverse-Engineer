@@ -20,12 +20,25 @@ Data (SQLite and image files) lives in `data/`.
 
 ## Models
 
-All model calls go through [OpenRouter](https://openrouter.ai). Defaults are in `apps/server/src/config.ts` and can be overridden in `.env` or in the app's Settings tab. Image default: `google/gemini-3.1-flash-image`; `openai/gpt-image-2.5-flare` also works as an alternative. Check that your configured ids exist, and probe aspect-ratio support, with:
+All model calls go through [OpenRouter](https://openrouter.ai) by default (see [Other providers](#other-providers)). Defaults are in `apps/server/src/config.ts` and can be overridden in `.env` or in the app's Settings tab. Image default: `google/gemini-3.1-flash-image`; `openai/gpt-image-2.5-flare` also works as an alternative. Check that your configured ids exist, and probe aspect-ratio support, with:
 
 ```bash
 pnpm --filter @mixboard/server check-models          # ids only, free
 pnpm --filter @mixboard/server check-models --live   # generates 5 small images
 ```
+
+### Other providers
+
+Set `LLM_BASE_URL` in `.env`, or **API base URL** in the Settings tab, to any OpenAI-compatible chat-completions API, and put its key in `LLM_API_KEY` (or `OPENROUTER_API_KEY`). Set the model ids to that provider's ids.
+
+| Provider | Base URL | Key |
+|---|---|---|
+| OpenRouter (default) | `https://openrouter.ai/api/v1` | required |
+| OpenAI | `https://api.openai.com/v1` | required |
+| Anthropic | `https://api.anthropic.com/v1` | required |
+| Local (Ollama, LM Studio, llama.cpp) | e.g. `http://localhost:11434/v1` | not needed |
+
+Image generation sends OpenRouter's `modalities` and `image_config` fields and reads `message.images`. Providers that don't support those (OpenAI and Anthropic's compatible endpoints included) can run the agent, captions and taglines, but not image generation.
 
 ## Checks
 

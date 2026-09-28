@@ -490,13 +490,13 @@ export class Repo {
     const r = this.one("SELECT value FROM settings WHERE key='settings'");
     const stored = r ? (JSON.parse(r.value) as Partial<Settings>) : {};
     const flags = Object.fromEntries(SETTING_FLAGS.map((k) => [k, stored[k] ?? this.defaults[k]])) as Record<SettingFlag, boolean>;
-    return { ...flags, models: { ...this.defaults.models, ...stored.models } };
+    return { ...flags, models: { ...this.defaults.models, ...stored.models }, baseUrl: stored.baseUrl || this.defaults.baseUrl };
   }
 
   /**
    * Merges a patch into the stored overrides, so unset keys keep following the config defaults.
    * Precondition: `patch` satisfies SettingsPatch.
-   * Postcondition: only user-set keys are persisted; the resolved settings are returned.
+   * Postcondition: only user-set keys are persisted (`baseUrl: ''` removes that override); the resolved settings are returned.
    */
   updateSettings(patch: SettingsPatch): Settings {
     const r = this.one("SELECT value FROM settings WHERE key='settings'");
@@ -504,6 +504,8 @@ export class Repo {
     const next: SettingsPatch = { ...stored };
     for (const k of SETTING_FLAGS) if (patch[k] !== undefined) next[k] = patch[k];
     if (stored.models || patch.models) next.models = { ...stored.models, ...patch.models };
+    if (patch.baseUrl === '') delete next.baseUrl;
+    else if (patch.baseUrl !== undefined) next.baseUrl = patch.baseUrl;
     this.run("INSERT INTO settings (key,value) VALUES ('settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", JSON.stringify(next));
     return this.getSettings();
   }

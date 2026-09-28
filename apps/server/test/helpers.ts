@@ -14,6 +14,7 @@ export const defaultSettings: Settings = {
   showLineage: false,
   lineageFade: true,
   models: { agent: 'test/agent', caption: 'test/caption', tagline: 'test/tagline', image: 'test/image' },
+  baseUrl: 'https://openrouter.ai/api/v1',
 };
 
 export const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47]);

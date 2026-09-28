@@ -103,6 +103,15 @@ describe('Repo', () => {
     repo.updateSettings({ puns: true });
     expect(repo.getSettings()).toMatchObject({ cropRegenerated: false, puns: true });
   });
+  it('overrides the base URL and clears the override with an empty string', () => {
+    const { repo } = makeRepo();
+    expect(repo.getSettings().baseUrl).toBe(defaultSettings.baseUrl);
+    repo.updateSettings({ baseUrl: 'http://localhost:11434/v1' });
+    repo.updateSettings({ puns: true });
+    expect(repo.getSettings().baseUrl).toBe('http://localhost:11434/v1');
+    repo.updateSettings({ baseUrl: '' });
+    expect(repo.getSettings().baseUrl).toBe(defaultSettings.baseUrl);
+  });
   it('hides lineage arrows and fades them by default, and remembers changes', () => {
     const { repo } = makeRepo();
     expect(repo.getSettings()).toMatchObject({ showLineage: false, lineageFade: true });
