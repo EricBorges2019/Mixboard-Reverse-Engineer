@@ -48,6 +48,10 @@ cp -rf source dest          # NOT: cp -r source dest
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
+## Versioning
+
+The version lives in the root `package.json` and the history in `CHANGELOG.md`. Whenever a change a user would notice is finished, add a line to `## [Unreleased]` in `CHANGELOG.md` in the same change. Only run `pnpm release patch|minor|major` when asked: it commits and tags.
+
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
