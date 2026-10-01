@@ -34,4 +34,9 @@ describe('context', () => {
     expect(withSelection('make it blue', b, [])).toBe('make it blue');
     expect(withSelection('make it blue', b, [img.id, 'ghost'])).toBe(`make it blue\n\nSelected blocks:\n${describeBlock(img)}`);
   });
+  it('lists selected blocks in the order the user selected them, once each', () => {
+    const { c, img, txt } = board();
+    const b = c.repo.getBoard(c.board.id);
+    expect(withSelection('m', b, [txt.id, img.id, txt.id])).toBe(`m\n\nSelected blocks:\n${describeBlock(txt)}\n${describeBlock(img)}`);
+  });
 });

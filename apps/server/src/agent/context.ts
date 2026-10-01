@@ -32,9 +32,10 @@ export function buildSystemPrompt(input: { persona: string; board: Board; preloa
 /**
  * Appends the user's selected blocks to their message.
  * Precondition: none; unknown ids are ignored.
- * Postcondition: returns `message` unchanged when nothing valid is selected, otherwise `message` plus a `Selected blocks:` list.
+ * Postcondition: returns `message` unchanged when nothing valid is selected, otherwise `message` plus a `Selected blocks:`
+ * list in the order the user selected them (the order the client sent), without repeats.
  */
 export function withSelection(message: string, board: Board, selectedIds: string[]): string {
-  const selected = board.blocks.filter((b) => selectedIds.includes(b.id));
+  const selected = [...new Set(selectedIds)].flatMap((id) => board.blocks.find((b) => b.id === id) ?? []);
   return selected.length ? `${message}\n\nSelected blocks:\n${selected.map(describeBlock).join('\n')}` : message;
 }

@@ -39,6 +39,18 @@ describe('retry', () => {
     expect(t.repo.getBoard(t.board.id).blocks).toHaveLength(2);
   });
 
+  it('labels several references, listing only the sources that still exist', async () => {
+    const t = setup();
+    const extra = t.repo.createBlock(t.board.id, { type: 'image', name: 'Palm', rect: { x: 0, y: 500, w: 300, h: 300 } });
+    t.repo.addResource({ blockId: extra.id, kind: 'image', mimeType: 'image/png', bytes: PNG_BYTES });
+    const gone = t.repo.createBlock(t.board.id, { type: 'image', name: 'Gone', rect: { x: 0, y: 900, w: 300, h: 300 } });
+    const block = t.failed({ prompt: 'combine', origin: { action: 'reference', sourceBlockIds: [t.source.id, gone.id, extra.id] } });
+    t.repo.deleteBlock(gone.id);
+    await retry(t.run, block.id);
+    expect(t.llm.imageCalls[0].prompt).toBe('combine\n\nReference images, in the order attached:\n1. Mandrill\n2. Palm');
+    expect(t.llm.imageCalls[0].referenceImages).toHaveLength(2);
+  });
+
   it('skips sources that were deleted since', async () => {
     const t = setup();
     const block = t.failed({ prompt: 'a mandrill', origin: { action: 'reference', sourceBlockIds: [t.source.id] } });

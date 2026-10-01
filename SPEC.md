@@ -420,6 +420,7 @@ Arg notes from real calls:
 - The **Regenerate** and **More like this** buttons on an image do not use these intents: they bypass the agent (§4.6). The `regenerate` and `variation` intents only apply when the user asks for them in chat.
 - `style`: free text, e.g. `"classic oil painting, rich colors, soft lighting, detailed brushwork"`. Not an enum.
 - `source_block_ids`: board images used as references, e.g. a "combine these characters into one scene" request passed 4 block IDs with `intent: "create"`.
+  **Clone deviation (GitHub #9):** `create_image_block` has no `'1:1'` default for `aspect_ratio`. Without one, a combined image takes its first source's shape, and only a prompt with no sources stays square. With two or more references, the clone appends a numbered `Reference images, in the order attached:` list (caption title or block name) to the image prompt, so the image model can tell a base photo from the idea photos. Both are clone choices, not recovered behavior.
 - Image `prompt`: one descriptive sentence (medium + subject + details + lighting).
 - The agent's self-report said `save_style(style_description)`; real traffic shows `style_name` + `style_content`.
 - The model calls several tools in parallel in one step (7 `create_image_block` calls at once).

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ASPECT_SIZES, AspectRatio, nearestRatio, type Block, type Origin, type OriginAction } from '@mixboard/shared';
+import { ASPECT_SIZES, AspectRatio, nearestRatio, nearestRatioForSize, type Block, type Origin, type OriginAction } from '@mixboard/shared';
 import { defineTool, type ToolDef } from '../skills/registry';
 import type { ToolContext } from '../types';
 import { getBoardBlock } from './shared';
@@ -49,17 +49,53 @@ function originFor(action: OriginAction, sourceIds: string[]): Origin | null {
 /**
  * Turns source image blocks into data-URL reference images.
  * Precondition: `ids` came from imageSourceIds.
- * Postcondition: returns one data URL per block that has a stored file; blocks without files are skipped.
+ * Postcondition: returns, in order, each block that has a stored file with that file as a data URL; blocks without files are skipped.
  */
-function referenceImages(ctx: ToolContext, ids: string[]): string[] {
-  const urls: string[] = [];
+function referenceImages(ctx: ToolContext, ids: string[]): { block: Block; dataUrl: string }[] {
+  const refs: { block: Block; dataUrl: string }[] = [];
   for (const id of ids) {
     const block = ctx.repo.getBlock(id);
     const resource = block.resources.find((r) => r.kind === 'image');
     const file = resource && ctx.repo.readResourceBytes(resource.id);
-    if (file) urls.push(`data:${file.mimeType};base64,${file.bytes.toString('base64')}`);
+    if (file) refs.push({ block, dataUrl: `data:${file.mimeType};base64,${file.bytes.toString('base64')}` });
   }
-  return urls;
+  return refs;
+}
+
+/**
+ * Tells the image model which attached reference is which. The images arrive as bare attachments, so a prompt like
+ * "decorate my living room with these ideas" (GitHub #9) cannot say which one is the room without this list.
+ * Each image is named by its caption title when it has one (an upload's block name is often just a filename).
+ * Precondition: `refs` are the reference blocks in the order their images are attached.
+ * Postcondition: returns `prompt` unchanged for fewer than two references (nothing to tell apart), otherwise
+ * `prompt` plus a numbered `Reference images, in the order attached:` list.
+ */
+export function withReferenceLabels(prompt: string, refs: Block[]): string {
+  if (refs.length < 2) return prompt;
+  const lines = refs.map((b, i) => `${i + 1}. ${b.resources.find((r) => r.kind === 'image')?.caption?.title || b.name || 'Untitled image'}`);
+  return `${prompt}\n\nReference images, in the order attached:\n${lines.join('\n')}`;
+}
+
+/**
+ * Reads an image block's aspect ratio. Uploads (drop or paste) record none, so their block shape stands in.
+ * Precondition: `block` is an image block.
+ * Postcondition: returns the recorded ratio, or the ratio nearest the block's rect.
+ */
+function shapeOf(block: Block): AspectRatio {
+  return block.aspectRatio ?? nearestRatioForSize(block.rect.w, block.rect.h, AspectRatio.options);
+}
+
+/**
+ * Picks the shape of an image combined from sources when the agent gave none. The tool description asks the agent
+ * to pass the ratio of the image it builds on (a room photo redecorated with other photos' ideas, GitHub #9); when it
+ * does not, the first source's shape is a better guess than a square.
+ * Precondition: `sourceIds` came from imageSourceIds.
+ * Postcondition: returns `requested` when given; otherwise the first source's shape (see shapeOf), or `1:1` when
+ * there are no sources.
+ */
+function combinedRatio(ctx: ToolContext, requested: AspectRatio | undefined, sourceIds: string[]): AspectRatio {
+  if (requested) return requested;
+  return sourceIds.length ? shapeOf(ctx.repo.getBlock(sourceIds[0])) : '1:1';
 }
 
 /**
@@ -75,17 +111,19 @@ function startPlaceholder(ctx: ToolContext, input: { name: string; rect: Block['
 
 /**
  * Generates an image and stores it in `block`, from what the block records: its prompt (style included), its
- * aspect ratio and its origin sources as reference images. Try again replays the same recipe (imageActions/retry).
+ * aspect ratio and its origin sources as reference images, labelled by withReferenceLabels. Try again replays the
+ * same recipe (imageActions/retry).
  * Precondition: `block` exists, is `generating`, and has a prompt and an aspect ratio (startPlaceholder sets both).
  * Postcondition: on success the block holds the new image, is `ready`, a final `block` event was emitted, captioning was requested, and `{block_id, name}` is returned. On failure the block is `error`, a final `block` event was emitted and `{error}` is returned. An abort is rethrown.
  */
 async function generateIntoBlock(ctx: ToolContext, block: Block): Promise<{ block_id: string; name: string } | { error: string }> {
   try {
+    const refs = referenceImages(ctx, block.origin?.sourceBlockIds ?? []);
     const image = await ctx.llm.generateImage({
       model: ctx.models.image,
-      prompt: block.prompt!,
+      prompt: withReferenceLabels(block.prompt!, refs.map((r) => r.block)),
       aspectRatio: nearestRatio(block.aspectRatio!, ctx.imageSupportedRatios),
-      referenceImages: referenceImages(ctx, block.origin?.sourceBlockIds ?? []),
+      referenceImages: refs.map((r) => r.dataUrl),
       signal: ctx.signal,
     });
     const resource = ctx.repo.addResource({ blockId: block.id, kind: 'image', mimeType: image.mimeType, bytes: image.bytes });
@@ -105,14 +143,14 @@ async function generateIntoBlock(ctx: ToolContext, block: Block): Promise<{ bloc
 /**
  * Edits an existing image block into a new neighbouring block. Mixboard never replaces an image (SPEC §7.3), so the source block is left untouched.
  * Precondition: `targetId` is an image block on this board.
- * Postcondition: see generateIntoBlock; the new block sits 50 px right of the source, its origin is `action` from the source plus any extra image sources, and the source image is always sent as the first reference. Throws when the target is missing, foreign or not an image.
+ * Postcondition: see generateIntoBlock; without `ratio` the new block keeps the source's shape (see shapeOf); it sits 50 px right of the source, its origin is `action` from the source plus any extra image sources, and the source image is always sent as the first reference. Throws when the target is missing, foreign or not an image.
  */
 async function editImage(
   ctx: ToolContext,
   a: { action: OriginAction; targetId: string; prompt: string; ratio?: AspectRatio; style?: string; extraSourceIds: string[] },
 ): Promise<{ block_id: string; name: string } | { error: string }> {
   const target = getBoardBlock(ctx, a.targetId, 'image');
-  const ratio = a.ratio ?? target.aspectRatio ?? '1:1';
+  const ratio = a.ratio ?? shapeOf(target);
   const size = a.ratio ? ASPECT_SIZES[a.ratio] : { w: target.rect.w, h: target.rect.h };
   const block = startPlaceholder(ctx, {
     name: `${target.name} (edit)`,
@@ -127,10 +165,12 @@ async function editImage(
 export const imageTools: ToolDef[] = [
   defineTool({
     name: 'create_image_block',
-    description: 'Generate a new image and place it on the canvas as a block.',
+    description:
+      'Generate a new image and place it on the canvas as a block. When building on one source image with ideas from others (e.g. redecorating a room photo), pass the aspect_ratio nearest that image\'s width x height so the result keeps its framing; without one, a combined image takes the shape of the first source.',
     schema: z.object({
       prompt: z.string().min(1),
-      aspect_ratio: AspectRatio.default('1:1'),
+      // No schema default: without one, a combined image takes its first source's shape (combinedRatio), else 1:1.
+      aspect_ratio: AspectRatio.optional(),
       style: z.string().optional(),
       source_block_ids: z.array(z.string()).default([]),
       x: z.number().default(0),
@@ -144,17 +184,19 @@ export const imageTools: ToolDef[] = [
     /**
      * Creates an image block from a prompt (and optional reference blocks).
      * Precondition: arguments are validated; `source_block_ids` exist.
-     * Postcondition: see generateIntoBlock; the placeholder appears before generation starts.
+     * Postcondition: see generateIntoBlock; the placeholder appears before generation starts, shaped by combinedRatio.
      */
     async run(a, ctx) {
-      const base = ASPECT_SIZES[a.aspect_ratio];
+      const sourceIds = imageSourceIds(ctx, a.source_block_ids);
+      const ratio = combinedRatio(ctx, a.aspect_ratio, sourceIds);
+      const base = ASPECT_SIZES[ratio];
       const prompt = a.remove_background ? `${a.prompt}. Isolated subject on a plain transparent background.` : a.prompt;
       const block = startPlaceholder(ctx, {
         name: a.name || shortName(a.prompt),
         rect: { x: a.x, y: a.y, w: a.width ?? base.w, h: a.height ?? base.h },
         prompt: composePrompt(prompt, a.style),
-        aspectRatio: a.aspect_ratio,
-        origin: originFor('reference', imageSourceIds(ctx, a.source_block_ids)),
+        aspectRatio: ratio,
+        origin: originFor('reference', sourceIds),
       });
       return generateIntoBlock(ctx, block);
     },

@@ -19,6 +19,12 @@ button { font: inherit; cursor: pointer; }
 .tab-body[hidden] { display: none; }
 .chat { display: flex; flex-direction: column; height: 100%; gap: 8px; }
 .chat-items { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+/* The message box: selected blocks sit inside it, above the text (Mixboard, GitHub #9). */
+.composer { border: 1px solid #c9c4ba; border-radius: 12px; padding: 8px; background: #fff; }
+.composer:focus-within { border-color: #1a1a1a; }
+.composer textarea { border: 0; outline: none; resize: none; padding: 4px 0 0; }
+.composer-selection { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0 0 4px; padding: 0; }
+.composer-selection .thumb { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: #f0eeea; color: #666; font-weight: 600; }
 .chat textarea, .settings input, .inspector input, .inspector textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 8px; }
 .msg { padding: 8px 12px; border-radius: 10px; max-width: 90%; }
 .msg.user { align-self: flex-end; background: #1a1a1a; color: #fff; }

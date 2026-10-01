@@ -1,4 +1,5 @@
 import { nearestRatio, type Block } from '@mixboard/shared';
+import { withReferenceLabels } from '../agent/tools/image';
 import { HttpError } from '../errors';
 import { generateVariant } from './moreLikeThis';
 import { fillRegenerated } from './regenerate';
@@ -42,10 +43,10 @@ export async function retry(run: ImageActionRun, blockId: string): Promise<void>
 async function replayPrompt(run: ImageActionRun, block: Block, sourceIds: string[]): Promise<void> {
   const { repo, llm, config, onImageAdded } = run.deps;
   try {
-    const referenceImages = sourceIds.flatMap((id) => findImageSource(run.deps, id)?.dataUrl ?? []);
+    const sources = sourceIds.flatMap((id) => findImageSource(run.deps, id) ?? []);
     const image = await llm.generateImage({
-      model: repo.getSettings().models.image, prompt: block.prompt!, aspectRatio: nearestRatio(block.aspectRatio ?? '1:1', config.imageSupportedRatios),
-      referenceImages, signal: run.signal,
+      model: repo.getSettings().models.image, prompt: withReferenceLabels(block.prompt!, sources.map((s) => s.block)), aspectRatio: nearestRatio(block.aspectRatio ?? '1:1', config.imageSupportedRatios),
+      referenceImages: sources.map((s) => s.dataUrl), signal: run.signal,
     });
     const resource = repo.addResource({ blockId: block.id, kind: 'image', mimeType: image.mimeType, bytes: image.bytes });
     run.emit({ type: 'block', block: repo.setBlockStatus(block.id, 'ready'), isPlaceholder: false });

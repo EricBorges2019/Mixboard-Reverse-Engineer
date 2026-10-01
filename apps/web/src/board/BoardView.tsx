@@ -145,7 +145,9 @@ export function BoardView({ project, initialBoard, settings, updateSettings }: {
   );
 
   const selectedBlock = selectedIds.length === 1 ? blocks.find((b) => b.id === selectedIds[0]) ?? null : null;
-  const selectedImages = selectedIds.filter((id) => blocks.find((b) => b.id === id)?.type === 'image');
+  // In selection order, the order the agent receives them.
+  const selectedBlocks = selectedIds.flatMap((id) => blocks.find((b) => b.id === id) ?? []);
+  const selectedImages = selectedBlocks.filter((b) => b.type === 'image');
 
   return (
     <div className="board-view">
@@ -173,7 +175,7 @@ export function BoardView({ project, initialBoard, settings, updateSettings }: {
           ))}
         </nav>
         {/* The chat stays mounted so a running turn is not interrupted when switching tabs. */}
-        <div hidden={tab !== 'chat'} className="tab-body"><ChatPanel chat={chat} blockCount={blocks.length} onFocusBlock={focusBlock} /></div>
+        <div hidden={tab !== 'chat'} className="tab-body"><ChatPanel chat={chat} blockCount={blocks.length} onFocusBlock={focusBlock} selected={selectedBlocks} /></div>
         {tab === 'inspector' && <div className="tab-body"><Inspector block={selectedBlock} blocks={blocks} onSave={saveCaption} onFocusBlock={focusBlock} /></div>}
         {tab === 'styles' && (
           <div className="tab-body">

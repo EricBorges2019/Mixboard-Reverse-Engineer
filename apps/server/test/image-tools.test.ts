@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { composePrompt, imageTools } from '../src/agent/tools/image';
+import { composePrompt, imageTools, withReferenceLabels } from '../src/agent/tools/image';
 import type { ToolDef } from '../src/agent/skills/registry';
 import { NoImageError } from '../src/llm/types';
 import { PNG_BYTES, ScriptedLlm, makeCtx } from './helpers';
@@ -20,7 +20,59 @@ describe('composePrompt', () => {
   });
 });
 
+describe('withReferenceLabels', () => {
+  it('leaves a prompt with fewer than two references alone, and numbers several by caption title or name', () => {
+    const c = makeCtx();
+    const room = addImage(c, 'IMG_2231.jpg');
+    c.repo.setCaption(room.resources[0].id, { title: 'Bright open-plan living room', description: 'd' });
+    const leaves = addImage(c, 'Maple garland');
+    expect(withReferenceLabels('p', [room])).toBe('p');
+    expect(withReferenceLabels('p', [c.repo.getBlock(room.id), leaves])).toBe(
+      'p\n\nReference images, in the order attached:\n1. Bright open-plan living room\n2. Maple garland',
+    );
+  });
+});
+
 describe('create_image_block', () => {
+  // GitHub #9, from Mixboard's sample board: three fall decor photos plus a living-room photo, "Decorate my living
+  // room using these ideas". The result should keep the room's wide shape and say which attached image is which.
+  it('redecorates a room photo from decor photos: first source shape, labelled references in order', async () => {
+    const c = makeCtx();
+    const room = c.repo.createBlock(c.board.id, { type: 'image', name: 'living-room.jpg', rect: { x: 0, y: 0, w: 1280, h: 700 } });
+    c.repo.addResource({ blockId: room.id, kind: 'image', mimeType: 'image/png', bytes: PNG_BYTES });
+    const decor = ['Window garland', 'Pumpkin runner', 'Cider jar'].map((n) => addImage(c, n));
+    const ids = [room.id, ...decor.map((d) => d.id)];
+    const out = (await tool('create_image_block').run({ prompt: 'Decorate the living room with these fall ideas', source_block_ids: ids }, c.ctx)) as { block_id: string };
+
+    const call = (c.llm as ScriptedLlm).imageCalls[0];
+    expect(call.aspectRatio).toBe('16:9'); // an upload records no ratio: 1280x700 is nearest 16:9
+    expect(call.referenceImages).toHaveLength(4);
+    expect(call.prompt).toBe(
+      'Decorate the living room with these fall ideas\n\nReference images, in the order attached:\n1. living-room.jpg\n2. Window garland\n3. Pumpkin runner\n4. Cider jar',
+    );
+    // The stored prompt stays clean: labels are rebuilt from whichever sources still exist at generation time.
+    expect(c.repo.getBlock(out.block_id)).toMatchObject({ aspectRatio: '16:9', prompt: 'Decorate the living room with these fall ideas', origin: { action: 'reference', sourceBlockIds: ids } });
+  });
+
+  it('falls back to the first source shape, so a room selected last needs an explicit ratio', async () => {
+    const c = makeCtx();
+    const decor = addImage(c, 'Window garland'); // recorded 3:4
+    const room = c.repo.createBlock(c.board.id, { type: 'image', name: 'living-room.jpg', rect: { x: 0, y: 0, w: 1280, h: 700 } });
+    c.repo.addResource({ blockId: room.id, kind: 'image', mimeType: 'image/png', bytes: PNG_BYTES });
+    await tool('create_image_block').run({ prompt: 'Decorate the room', source_block_ids: [decor.id, room.id] }, c.ctx);
+    await tool('create_image_block').run({ prompt: 'Decorate the room', source_block_ids: [decor.id, room.id], aspect_ratio: '16:9' }, c.ctx);
+    expect((c.llm as ScriptedLlm).imageCalls.map((x) => x.aspectRatio)).toEqual(['3:4', '16:9']);
+  });
+
+  it('uses a recorded source ratio, lets an explicit ratio win, and stays square without sources', async () => {
+    const c = makeCtx();
+    const src = addImage(c); // recorded 3:4
+    await tool('create_image_block').run({ prompt: 'a', source_block_ids: [src.id] }, c.ctx);
+    await tool('create_image_block').run({ prompt: 'b', source_block_ids: [src.id], aspect_ratio: '9:16' }, c.ctx);
+    await tool('create_image_block').run({ prompt: 'c' }, c.ctx);
+    expect((c.llm as ScriptedLlm).imageCalls.map((x) => x.aspectRatio)).toEqual(['3:4', '9:16', '1:1']);
+  });
+
   it('emits a placeholder first, then the finished block, and triggers captioning', async () => {
     const c = makeCtx();
     const out = (await tool('create_image_block').run({ prompt: 'a dragon', aspect_ratio: '16:9', style: 'oil paint', x: 450, y: 0, name: 'Dragon' }, c.ctx)) as { block_id: string };
@@ -85,6 +137,17 @@ describe('update_image_block', () => {
     expect(created.rect).toEqual({ x: 450, y: 200, w: 300, h: 200 });
     expect(c.repo.getBlock(src.id).resources).toHaveLength(1);
     expect((c.llm as ScriptedLlm).imageCalls[0].referenceImages).toHaveLength(1);
+  });
+  it('keeps an uploaded room photo wide when editing it with decor photos as extra references (GitHub #9)', async () => {
+    const c = makeCtx();
+    const room = c.repo.createBlock(c.board.id, { type: 'image', name: 'living-room.jpg', rect: { x: 0, y: 0, w: 1280, h: 700 } });
+    c.repo.addResource({ blockId: room.id, kind: 'image', mimeType: 'image/png', bytes: PNG_BYTES });
+    const decor = addImage(c, 'Pumpkin runner');
+    const out = (await tool('update_image_block').run({ update_block_id: room.id, prompt: 'Decorate with these fall ideas', source_block_ids: [decor.id] }, c.ctx)) as { block_id: string };
+    const call = (c.llm as ScriptedLlm).imageCalls[0];
+    expect(call.aspectRatio).toBe('16:9');
+    expect(call.prompt).toBe('Decorate with these fall ideas\n\nReference images, in the order attached:\n1. living-room.jpg\n2. Pumpkin runner');
+    expect(c.repo.getBlock(out.block_id)).toMatchObject({ aspectRatio: '16:9', rect: { w: 1280, h: 700 } });
   });
   it('never replaces the original, even when create_new_block_for_update is false', async () => {
     const c = makeCtx();

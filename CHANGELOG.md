@@ -6,6 +6,12 @@ Add a line under **Unreleased** whenever a change lands that a user of the app w
 
 ## [Unreleased]
 
+### Added
+- The chat's message box shows the selected blocks as small thumbnails above the text, as in Mixboard, so you can see what goes to the agent with your message.
+
+### Changed
+- "Decorate my living room using these ideas" with a room photo and decor photos selected (GitHub #9): the image model is now told which attached reference is which, and the agent is asked to keep the room's shape. A combined image with no requested shape follows its first source instead of coming out square, and editing an uploaded photo keeps its shape. Selected blocks reach the agent in selection order rather than board order.
+
 ## [0.3.1] - 2026-09-24
 
 ### Added
