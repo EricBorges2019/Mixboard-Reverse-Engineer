@@ -63,10 +63,13 @@ export class OpenRouterLlm implements Llm {
   /**
    * Runs one non-streaming chat completion.
    * Precondition: `req.model` is a valid OpenRouter model id; `req.messages` is a valid conversation.
-   * Postcondition: returns the assistant message (normalized) and finish reason; throws LlmError on failure.
+   * Postcondition: returns the assistant message (normalized) and finish reason; throws LlmError on failure. When `req.cacheTtl` is set, a leading string system message is sent with a cache breakpoint (`ttl: "1h"` for one hour; the provider default of 5 minutes otherwise).
    */
   async chat(req: ChatRequest): Promise<ChatResult> {
-    const json = await this.post({ model: req.model, messages: req.messages, ...(req.tools?.length ? { tools: req.tools } : {}) }, req.signal);
+    const messages = req.cacheTtl ? req.messages.map((m, i) => (i === 0 && m.role === 'system' && typeof m.content === 'string'
+      ? { ...m, content: [{ type: 'text', text: m.content, cache_control: { type: 'ephemeral', ...(req.cacheTtl === '1h' ? { ttl: '1h' } : {}) } }] }
+      : m)) : req.messages;
+    const json = await this.post({ model: req.model, messages, ...(req.tools?.length ? { tools: req.tools } : {}) }, req.signal);
     const choice = json?.choices?.[0];
     if (!choice?.message) throw new LlmError('OpenRouter returned no choices');
     return { message: normalizeMessage(choice.message), finishReason: choice.finish_reason ?? 'stop' };

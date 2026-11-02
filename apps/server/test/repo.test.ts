@@ -105,10 +105,16 @@ describe('Repo', () => {
   });
   it('hides lineage arrows and fades them by default, and remembers changes', () => {
     const { repo } = makeRepo();
-    expect(repo.getSettings()).toMatchObject({ showLineage: false, lineageFade: true });
+    expect(repo.getSettings()).toMatchObject({ showLineage: false, lineageFade: true, cacheTtl: '5m' });
     repo.updateSettings({ showLineage: true });
     repo.updateSettings({ lineageFade: false });
     expect(repo.getSettings()).toMatchObject({ showLineage: true, lineageFade: false, cropRegenerated: true });
+  });
+  it('defaults the cache TTL to 5m and remembers 1h', () => {
+    const { repo } = makeRepo();
+    expect(repo.getSettings().cacheTtl).toBe('5m');
+    repo.updateSettings({ cacheTtl: '1h' });
+    expect(repo.getSettings().cacheTtl).toBe('1h');
   });
   it('stores where a block came from, and null for blocks made from nothing', () => {
     const { repo } = makeRepo();

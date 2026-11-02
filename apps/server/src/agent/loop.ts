@@ -101,6 +101,7 @@ export async function runAgent(input: { req: AgentRunRequest; deps: AgentDeps; e
         model: settings.models.agent,
         messages: [{ role: 'system', content: system }, ...history, ...newMessages],
         tools: tools.map(toSpec),
+        cacheTtl: settings.cacheTtl,
         signal,
       });
       const calls = message.tool_calls ?? [];

@@ -6,6 +6,9 @@ Add a line under **Unreleased** whenever a change lands that a user of the app w
 
 ## [Unreleased]
 
+### Added
+- Settings has a switch for how long the agent's prompt stays cached: 5 minutes (default) or 1 hour.
+
 ### Fixed
 - The "Generation failed" notice no longer spills past its block on Linux, where the system font is wider.
 

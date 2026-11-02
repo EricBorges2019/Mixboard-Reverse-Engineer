@@ -13,6 +13,7 @@ export const defaultSettings: Settings = {
   cropRegenerated: true,
   showLineage: false,
   lineageFade: true,
+  cacheTtl: '5m',
   models: { agent: 'test/agent', caption: 'test/caption', tagline: 'test/tagline', image: 'test/image' },
 };
 

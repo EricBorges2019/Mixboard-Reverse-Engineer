@@ -490,7 +490,7 @@ export class Repo {
     const r = this.one("SELECT value FROM settings WHERE key='settings'");
     const stored = r ? (JSON.parse(r.value) as Partial<Settings>) : {};
     const flags = Object.fromEntries(SETTING_FLAGS.map((k) => [k, stored[k] ?? this.defaults[k]])) as Record<SettingFlag, boolean>;
-    return { ...flags, models: { ...this.defaults.models, ...stored.models } };
+    return { ...flags, cacheTtl: stored.cacheTtl ?? this.defaults.cacheTtl, models: { ...this.defaults.models, ...stored.models } };
   }
 
   /**
@@ -503,6 +503,7 @@ export class Repo {
     const stored = r ? (JSON.parse(r.value) as SettingsPatch) : {};
     const next: SettingsPatch = { ...stored };
     for (const k of SETTING_FLAGS) if (patch[k] !== undefined) next[k] = patch[k];
+    if (patch.cacheTtl !== undefined) next.cacheTtl = patch.cacheTtl;
     if (stored.models || patch.models) next.models = { ...stored.models, ...patch.models };
     this.run("INSERT INTO settings (key,value) VALUES ('settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", JSON.stringify(next));
     return this.getSettings();

@@ -21,7 +21,7 @@ export interface ToolSpec {
   function: { name: string; description: string; parameters: Record<string, unknown> };
 }
 
-export interface ChatRequest { model: string; messages: ChatMessage[]; tools?: ToolSpec[]; signal?: AbortSignal }
+export interface ChatRequest { model: string; messages: ChatMessage[]; tools?: ToolSpec[]; cacheTtl?: '5m' | '1h'; signal?: AbortSignal }
 export interface ChatResult { message: ChatMessage; finishReason: string }
 export interface ImageRequest { model: string; prompt: string; aspectRatio: AspectRatio; referenceImages?: string[]; signal?: AbortSignal }
 export interface GeneratedImage { bytes: Buffer; mimeType: string }

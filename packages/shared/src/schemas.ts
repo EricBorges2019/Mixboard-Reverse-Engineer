@@ -114,7 +114,11 @@ export type Models = z.infer<typeof Models>;
 export const SETTING_FLAGS = ['puns', 'cropRegenerated', 'showLineage', 'lineageFade'] as const;
 export type SettingFlag = (typeof SETTING_FLAGS)[number];
 
-export const Settings = z.object({ puns: z.boolean(), cropRegenerated: z.boolean(), showLineage: z.boolean(), lineageFade: z.boolean(), models: Models });
+/** How long the provider keeps the agent's prompt prefix cached: 5 minutes (default) or 1 hour. */
+export const CacheTtl = z.enum(['5m', '1h']);
+export type CacheTtl = z.infer<typeof CacheTtl>;
+
+export const Settings = z.object({ puns: z.boolean(), cropRegenerated: z.boolean(), showLineage: z.boolean(), lineageFade: z.boolean(), cacheTtl: CacheTtl, models: Models });
 export type Settings = z.infer<typeof Settings>;
 
 export const SettingsPatch = Settings.omit({ models: true }).partial().extend({ models: Models.partial().optional() });

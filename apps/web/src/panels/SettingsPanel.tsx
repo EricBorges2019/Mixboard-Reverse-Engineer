@@ -44,6 +44,13 @@ export function SettingsPanel({ settings, update }: { settings: Settings; update
         </button>
       </div>
       <p className="hint">Arrows run from each image to the images made from it. Off: hold L on the canvas to see them. Fade: ease them in and out instead of showing them instantly.</p>
+      <div className="row">
+        <span id="cache-label">Cache for 1 hour</span>
+        <button role="switch" aria-checked={settings.cacheTtl === '1h'} aria-labelledby="cache-label" className="switch" onClick={() => void update({ cacheTtl: settings.cacheTtl === '1h' ? '5m' : '1h' })}>
+          {settings.cacheTtl === '1h' ? '1h' : '5m'}
+        </button>
+      </div>
+      <p className="hint">How long the model provider keeps the agent's prompt cached. 5m is the default. 1h costs more to write but saves tokens when you pause between messages.</p>
       {MODEL_FIELDS.map(({ key, label }) => (
         <label key={key}>{label}<input value={models[key]} onChange={(e) => setModels({ ...models, [key]: e.target.value })} /></label>
       ))}

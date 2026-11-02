@@ -22,6 +22,18 @@ describe('OpenRouterLlm.chat', () => {
     expect(f.headers[0].authorization).toBe('Bearer k');
     expect(f.requests[0]).toMatchObject({ model: 'm', tools });
   });
+  it('marks the system message cacheable only when a TTL is given (5m default, 1h explicit)', async () => {
+    const f = await fake([chatReply({ content: 'a' }), chatReply({ content: 'b' }), chatReply({ content: 'c' })]);
+    const llm = new OpenRouterLlm({ apiKey: 'k', baseUrl: f.url });
+    const messages = [{ role: 'system' as const, content: 'sys' }, { role: 'user' as const, content: 'yo' }];
+    await llm.chat({ model: 'm', messages });
+    await llm.chat({ model: 'm', messages, cacheTtl: '5m' });
+    await llm.chat({ model: 'm', messages, cacheTtl: '1h' });
+    expect(f.requests[0].messages[0].content).toBe('sys');
+    expect(f.requests[1].messages[0].content).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }]);
+    expect(f.requests[2].messages[0].content).toEqual([{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral', ttl: '1h' } }]);
+    expect(f.requests[2].messages[1].content).toBe('yo');
+  });
   it('preserves tool calls and reasoning_details', async () => {
     const reply = chatReply({ tool_calls: [{ name: 'x', args: { a: 1 } }] });
     (reply.body as any).choices[0].message.reasoning_details = [{ type: 'r' }];

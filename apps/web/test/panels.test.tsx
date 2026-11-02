@@ -49,13 +49,21 @@ describe('Inspector', () => {
 });
 
 describe('SettingsPanel', () => {
-  const settings: Settings = { puns: false, cropRegenerated: true, showLineage: false, lineageFade: true, models: { agent: 'a', caption: 'c', tagline: 't', image: 'i' } };
+  const settings: Settings = { puns: false, cropRegenerated: true, showLineage: false, lineageFade: true, cacheTtl: '5m', models: { agent: 'a', caption: 'c', tagline: 't', image: 'i' } };
   it('toggles the two lineage arrow settings', () => {
     const update = vi.fn(async () => {});
     render(<SettingsPanel settings={settings} update={update} />);
     fireEvent.click(screen.getByRole('switch', { name: 'Show lineage at all times' }));
     fireEvent.click(screen.getByRole('switch', { name: 'Fade lineage arrows' }));
     expect(update.mock.calls).toEqual([[{ showLineage: true }], [{ lineageFade: false }]]);
+  });
+  it('switches the cache time between 5m and 1h', () => {
+    const update = vi.fn(async () => {});
+    const { rerender } = render(<SettingsPanel settings={settings} update={update} />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Cache for 1 hour' }));
+    rerender(<SettingsPanel settings={{ ...settings, cacheTtl: '1h' }} update={update} />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Cache for 1 hour' }));
+    expect(update.mock.calls).toEqual([[{ cacheTtl: '1h' }], [{ cacheTtl: '5m' }]]);
   });
   it('toggles cropping of regenerated images', () => {
     const update = vi.fn(async () => {});

@@ -8,6 +8,9 @@ import { OpenRouterLlm } from '../src/llm/openrouter';
 import { chatReply, startFakeOpenRouter, type FakeScript } from './fakeOpenRouter';
 import { makeRepo } from './helpers';
 
+/** Returns the system prompt text of a recorded request, whether sent as a string or as cache-marked parts. */
+const systemText = (req: any): string => { const c = req.messages[0].content; return typeof c === 'string' ? c : c.map((p: any) => p.text).join(''); };
+
 let closers: (() => Promise<void>)[] = [];
 afterEach(async () => { await Promise.all(closers.map((c) => c())); closers = []; });
 
@@ -36,7 +39,7 @@ describe('runAgent', () => {
     await s.run();
     expect(s.events).toEqual([{ type: 'text', text: 'Hi there' }]);
     expect(s.toolNames(0)).toEqual(['list_skills', 'load_skill']);
-    expect(s.fake.requests[0].messages[0].content).toContain('Mixboard');
+    expect(systemText(s.fake.requests[0])).toContain('Mixboard');
     expect(s.repo.listMessages(s.board.id)).toMatchObject([{ role: 'user', content: 'hello' }, { role: 'assistant', content: 'Hi there' }]);
   });
 
@@ -95,7 +98,7 @@ describe('runAgent', () => {
     const s = await setup([chatReply({ tool_calls: [{ name: 'ask_clarification', args: { questions: [q, { ...q, question: 'Style?' }] } }] })]);
     await s.run({ shortcut: 3, message: 'a fantasy town board' });
     expect(s.fake.requests).toHaveLength(1);
-    expect(s.fake.requests[0].messages[0].content).toContain('Kick-start an empty board');
+    expect(systemText(s.fake.requests[0])).toContain('Kick-start an empty board');
     expect(s.toolNames(0)).toContain('ask_clarification');
     expect(s.events.map((e) => e.type)).toEqual(['tool_call', 'clarification', 'tool_result']);
     expect((s.repo.listMessages(s.board.id) as any[]).at(-1).role).toBe('tool');
@@ -109,7 +112,7 @@ describe('runAgent', () => {
     ]);
     await s.run({ shortcut: 3, message: 'a fantasy town board' });
     await s.run({ message: 'castles; watercolor' });
-    expect(s.fake.requests[1].messages[0].content).toContain('Kick-start an empty board');
+    expect(systemText(s.fake.requests[1])).toContain('Kick-start an empty board');
     expect(s.toolNames(1)).toContain('ask_clarification');
   });
 
@@ -117,14 +120,14 @@ describe('runAgent', () => {
     const s = await setup([{ status: 500, body: { error: { message: 'boom' } } }, chatReply({ content: 'ok' })]);
     await s.run({ shortcut: 3, message: 'a fantasy town board' });
     await s.run({ shortcut: 3, message: 'a fantasy town board' });
-    expect(s.fake.requests[1].messages[0].content).toContain('Kick-start an empty board');
+    expect(systemText(s.fake.requests[1])).toContain('Kick-start an empty board');
   });
 
   it('ignores the onboarding shortcut on a board that already has blocks', async () => {
     const s = await setup([chatReply({ content: 'ok' })]);
     s.repo.createBlock(s.board.id, { type: 'text', rect: { x: 0, y: 0, w: 10, h: 10 } });
     await s.run({ shortcut: 3 });
-    expect(s.fake.requests[0].messages[0].content).not.toContain('Kick-start an empty board');
+    expect(systemText(s.fake.requests[0])).not.toContain('Kick-start an empty board');
     expect(s.toolNames(0)).toEqual(['list_skills', 'load_skill']);
   });
 

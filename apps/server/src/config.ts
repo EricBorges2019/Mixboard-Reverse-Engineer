@@ -30,6 +30,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       cropRegenerated: true,
       showLineage: false,
       lineageFade: true,
+      cacheTtl: '5m',
       models: {
         agent,
         caption: env.CAPTION_MODEL ?? agent,
